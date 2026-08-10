@@ -36,67 +36,86 @@ interface MenuGroup {
     items: MenuItem[]
 }
 
-const menuGroups: MenuGroup[] = [
-    {
-        items: [
+const menuGroups = computed<MenuGroup[]>(() => {
+    const role = (session.value?.role || '').toLowerCase()
+
+    if (role === 'cashier') {
+        return [
             {
-                label: 'Dashboard',
-                icon: 'pi pi-home',
-                route: '/admin',
+                label: 'Transaksi',
+                items: [
+                    {
+                        label: 'Order',
+                        icon: 'pi pi-shopping-cart',
+                        route: '/orders',
+                    },
+                ],
             },
-            {
-                label: 'Landing Page',
-                icon: 'pi pi-globe',
-                route: '/',
-            },
-        ],
-    },
-    {
-        label: 'Master',
-        items: [
-            {
-                label: 'Category',
-                icon: 'pi pi-tags',
-                route: '/master/categories',
-            },
-            {
-                label: 'Barang',
-                icon: 'pi pi-box',
-                route: '/master/products',
-            },
-            {
-                label: 'Customer',
-                icon: 'pi pi-users',
-                route: '/master/customers',
-            },
-            {
-                label: 'User',
-                icon: 'pi pi-user',
-                route: '/master/users',
-            },
-        ],
-    },
-    {
-        label: 'Transaksi',
-        items: [
-            {
-                label: 'Order',
-                icon: 'pi pi-shopping-cart',
-                route: '/orders',
-            },
-        ],
-    },
-    {
-        label: 'Report',
-        items: [
-            {
-                label: 'Laporan',
-                icon: 'pi pi-chart-bar',
-                route: '/reports',
-            },
-        ],
-    },
-]
+        ]
+    }
+
+    return [
+        {
+            items: [
+                {
+                    label: 'Dashboard',
+                    icon: 'pi pi-home',
+                    route: '/admin',
+                },
+                {
+                    label: 'Landing Page',
+                    icon: 'pi pi-globe',
+                    route: '/',
+                },
+            ],
+        },
+        {
+            label: 'Master',
+            items: [
+                {
+                    label: 'Category',
+                    icon: 'pi pi-tags',
+                    route: '/master/categories',
+                },
+                {
+                    label: 'Barang',
+                    icon: 'pi pi-box',
+                    route: '/master/products',
+                },
+                {
+                    label: 'Customer',
+                    icon: 'pi pi-users',
+                    route: '/master/customers',
+                },
+                {
+                    label: 'User',
+                    icon: 'pi pi-user',
+                    route: '/master/users',
+                },
+            ],
+        },
+        {
+            label: 'Transaksi',
+            items: [
+                {
+                    label: 'Order',
+                    icon: 'pi pi-shopping-cart',
+                    route: '/orders',
+                },
+            ],
+        },
+        {
+            label: 'Report',
+            items: [
+                {
+                    label: 'Laporan',
+                    icon: 'pi pi-chart-bar',
+                    route: '/reports',
+                },
+            ],
+        },
+    ]
+})
 
 function closeMobileSidebar() {
     mobileSidebarVisible.value = false

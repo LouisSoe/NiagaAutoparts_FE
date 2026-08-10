@@ -51,9 +51,12 @@ const handleLogin = async (): Promise<void> => {
       life: 3000,
     })
 
-    // 3. Masuk Dashboard / Catalog berdasarkan Role
-    if (session.role === 'customer') {
+    // 3. Masuk Dashboard / Catalog / Order berdasarkan Role
+    const role = (session.role || '').toLowerCase()
+    if (role === 'customer') {
       router.push('/')
+    } else if (role === 'cashier') {
+      router.push('/orders')
     } else {
       router.push('/admin')
     }

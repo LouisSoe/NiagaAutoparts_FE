@@ -100,17 +100,24 @@ router.beforeEach((to, _from, next) => {
 
         if (requiresAdmin) {
             const role = (session.role || '').toLowerCase()
-            if (role !== 'admin') {
+            if (role === 'cashier') {
+                // Cashier is only allowed to access /orders
+                if (to.path !== '/orders') {
+                    return next({ name: 'orders' })
+                }
+            } else if (role !== 'admin') {
                 return next({ name: 'landing' })
             }
         }
     }
 
-    // Redirect logged-in admin away from login page to dashboard
+    // Redirect logged-in admin/cashier away from login page
     if (to.name === 'login' && session && !session.isGuest) {
         const role = (session.role || '').toLowerCase()
         if (role === 'admin') {
             return next({ name: 'dashboard' })
+        } else if (role === 'cashier') {
+            return next({ name: 'orders' })
         }
     }
 

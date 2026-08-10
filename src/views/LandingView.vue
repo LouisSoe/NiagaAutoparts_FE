@@ -21,7 +21,7 @@ import Textarea from 'primevue/textarea'
 import { useToast } from 'primevue/usetoast'
 
 import { formatCurrencyIDR } from '@/utils/format'
-import { getSession, clearSession } from '@/services/authService'
+import { getSession, clearSession, updateUserProfile } from '@/services/authService'
 import { fetchCategories } from '@/services/categoryService'
 import { fetchProducts } from '@/services/productService'
 import { createOrder } from '@/services/orderService'
@@ -293,13 +293,69 @@ const paymentMethod = ref<'midtrans' | 'cash'>('midtrans')
 const createdOrderNumber = ref('')
 const createdOrderStatus = ref('')
 
+/* =========================================================
+ * PROFILE MODAL STATE & LOGIC
+ * ======================================================= */
+const isProfileModalOpen = ref(false)
+const profileForm = ref({
+  name: '',
+  email: '',
+  phone: '',
+  address: '',
+})
+
+const openProfileModal = (): void => {
+  const session = getSession()
+  if (session) {
+    profileForm.value = {
+      name: session.name || '',
+      email: session.email || '',
+      phone: session.phone || '',
+      address: session.address || '',
+    }
+  }
+  userPopover.value?.hide()
+  isProfileModalOpen.value = true
+}
+
+const handleSaveProfile = (): void => {
+  if (!profileForm.value.name.trim()) {
+    toast.add({
+      severity: 'error',
+      summary: 'Data Tidak Lengkap',
+      detail: 'Nama lengkap tidak boleh kosong.',
+      life: 3000,
+    })
+    return
+  }
+
+  updateUserProfile({
+    name: profileForm.value.name.trim(),
+    email: profileForm.value.email.trim(),
+    phone: profileForm.value.phone.trim(),
+    address: profileForm.value.address.trim(),
+  })
+
+  // Update current session ref
+  currentSession.value = getSession()
+
+  toast.add({
+    severity: 'success',
+    summary: 'Profil Diperbarui',
+    detail: 'Data profil Anda berhasil disimpan.',
+    life: 3000,
+  })
+  isProfileModalOpen.value = false
+}
+
 const openCheckoutModal = (): void => {
   const session = getSession()
   if (session && !session.isGuest) {
     isUserLoggedIn.value = true
     customerForm.value.name = session.name || ''
     customerForm.value.email = session.email || ''
-    customerForm.value.phone = ''
+    customerForm.value.phone = session.phone || ''
+    customerForm.value.address = session.address || ''
   } else {
     isUserLoggedIn.value = false
   }
@@ -508,6 +564,15 @@ onMounted(async () => {
                       <span class="text-xs text-500 capitalize">{{ currentSession?.role || 'User' }}</span>
                     </div>
                   </div>
+                  <Button
+                    label="Profil Saya"
+                    icon="pi pi-user-edit"
+                    severity="secondary"
+                    outlined
+                    size="small"
+                    class="w-full"
+                    @click="openProfileModal"
+                  />
                   <Button
                     label="Logout"
                     icon="pi pi-sign-out"
@@ -1003,6 +1068,56 @@ onMounted(async () => {
       <template #footer>
         <div class="flex justify-content-center w-full">
           <Button label="Kembali ke Katalog" severity="primary" class="w-full font-semibold" @click="isSuccessModalOpen = false" />
+        </div>
+      </template>
+    </Dialog>
+
+    <!-- ==========================================
+         7.5. MODAL PROFIL CUSTOMER
+    =========================================== -->
+    <Dialog
+      v-model:visible="isProfileModalOpen"
+      modal
+      header="Profil Saya"
+      style="width: 32rem"
+    >
+      <div class="flex flex-column gap-3 pt-2">
+        <div class="flex align-items-center gap-3 p-3 bg-blue-50 border-round-xl border-1 border-blue-200">
+          <div class="w-3rem h-3rem border-circle bg-blue-600 text-white flex align-items-center justify-content-center font-bold text-xl">
+            <i class="pi pi-user text-2xl"></i>
+          </div>
+          <div>
+            <div class="font-bold text-base text-blue-900">{{ currentUserName }}</div>
+            <div class="text-xs text-600">Kelola data profil & alamat pengiriman utama Anda</div>
+          </div>
+        </div>
+
+        <div class="flex flex-column gap-1">
+          <label for="prof-name" class="text-xs font-semibold text-700">Nama Lengkap *</label>
+          <InputText id="prof-name" v-model="profileForm.name" placeholder="Masukkan nama lengkap" class="w-full text-sm" />
+        </div>
+
+        <div class="grid">
+          <div class="col-12 sm:col-6 flex flex-column gap-1">
+            <label for="prof-phone" class="text-xs font-semibold text-700">Nomor Telepon / WA</label>
+            <InputText id="prof-phone" v-model="profileForm.phone" placeholder="08xxxxxxxxxx" class="w-full text-sm" />
+          </div>
+          <div class="col-12 sm:col-6 flex flex-column gap-1">
+            <label for="prof-email" class="text-xs font-semibold text-700">Email</label>
+            <InputText id="prof-email" v-model="profileForm.email" placeholder="nama@email.com" class="w-full text-sm" />
+          </div>
+        </div>
+
+        <div class="flex flex-column gap-1">
+          <label for="prof-address" class="text-xs font-semibold text-700">Alamat Pengiriman Utama</label>
+          <Textarea id="prof-address" v-model="profileForm.address" rows="3" placeholder="Masukkan jalan, RT/RW, Kecamatan, Kota, Kode Pos..." class="w-full text-sm" />
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="flex justify-content-end gap-2 w-full pt-2">
+          <Button label="Batal" severity="secondary" outlined size="small" @click="isProfileModalOpen = false" />
+          <Button label="Simpan Profil" icon="pi pi-check" severity="primary" size="small" @click="handleSaveProfile" />
         </div>
       </template>
     </Dialog>

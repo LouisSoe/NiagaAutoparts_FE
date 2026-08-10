@@ -12,6 +12,8 @@ export interface UserSession {
   username?: string
   email?: string
   name: string
+  phone?: string
+  address?: string
   role: UserRole | 'guest'
   token?: string
   isGuest: boolean
@@ -200,4 +202,18 @@ export function getSession(): UserSession | null {
 
 export function clearSession(): void {
   localStorage.removeItem(SESSION_KEY)
+}
+
+export function updateUserProfile(profile: { name?: string; phone?: string; address?: string; email?: string }): UserSession | null {
+  const current = getSession()
+  if (!current) return null
+  const updated: UserSession = {
+    ...current,
+    name: profile.name ?? current.name,
+    phone: profile.phone ?? current.phone,
+    address: profile.address ?? current.address,
+    email: profile.email ?? current.email,
+  }
+  saveSession(updated)
+  return updated
 }

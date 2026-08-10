@@ -1,11 +1,29 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { RouterLink, RouterView } from 'vue-router'
+import { ref, computed } from 'vue'
+import { RouterLink, RouterView, useRouter } from 'vue-router'
 
 import Button from 'primevue/button'
 import Drawer from 'primevue/drawer'
+import Popover from 'primevue/popover'
+import { getSession, clearSession } from '@/services/authService'
+
+const router = useRouter()
+const session = computed(() => getSession())
+
+const userName = computed(() => session.value?.name || session.value?.username || 'Administrator')
+const userRole = computed(() => session.value?.role || 'Admin')
 
 const mobileSidebarVisible = ref(false)
+const profilePopover = ref()
+
+function toggleProfilePopover(event: Event) {
+    profilePopover.value.toggle(event)
+}
+
+function handleLogout() {
+    clearSession()
+    router.push('/login')
+}
 
 interface MenuItem {
     label: string
@@ -24,6 +42,11 @@ const menuGroups: MenuGroup[] = [
             {
                 label: 'Dashboard',
                 icon: 'pi pi-home',
+                route: '/admin',
+            },
+            {
+                label: 'Landing Page',
+                icon: 'pi pi-globe',
                 route: '/',
             },
         ],
@@ -45,6 +68,11 @@ const menuGroups: MenuGroup[] = [
                 label: 'Customer',
                 icon: 'pi pi-users',
                 route: '/master/customers',
+            },
+            {
+                label: 'User',
+                icon: 'pi pi-user',
+                route: '/master/users',
             },
         ],
     },
@@ -126,9 +154,21 @@ function closeMobileSidebar() {
                     </div>
 
                     <div class="user-information">
-                        <strong>Administrator</strong>
-                        <small>Admin</small>
+                        <strong>{{ userName }}</strong>
+                        <small>{{ userRole }}</small>
                     </div>
+
+                    <Button
+                        icon="pi pi-power-off"
+                        severity="danger"
+                        text
+                        rounded
+                        size="small"
+                        aria-label="Logout"
+                        title="Logout"
+                        style="margin-left: auto;"
+                        @click="handleLogout"
+                    />
                 </div>
             </div>
         </aside>
@@ -207,20 +247,36 @@ function closeMobileSidebar() {
 
                 <div class="topbar-right">
                     <Button
-                        icon="pi pi-bell"
-                        severity="secondary"
-                        text
-                        rounded
-                        aria-label="Notification"
-                    />
-
-                    <Button
                         icon="pi pi-user"
                         severity="secondary"
                         text
                         rounded
-                        aria-label="User"
+                        aria-label="Profil User"
+                        title="Profil"
+                        @click="toggleProfilePopover"
                     />
+                    <Popover ref="profilePopover">
+                        <div class="p-3 w-14rem flex flex-column gap-3">
+                            <div class="flex align-items-center gap-2 pb-2 border-bottom-1 surface-border">
+                                <div class="w-2rem h-2rem border-circle bg-primary-100 text-primary-700 flex align-items-center justify-content-center font-bold">
+                                    <i class="pi pi-user text-sm"></i>
+                                </div>
+                                <div class="flex flex-column min-w-0">
+                                    <span class="font-semibold text-sm text-900 truncate">{{ userName }}</span>
+                                    <span class="text-xs text-500 capitalize">{{ userRole }}</span>
+                                </div>
+                            </div>
+                            <Button
+                                label="Logout"
+                                icon="pi pi-power-off"
+                                severity="danger"
+                                outlined
+                                size="small"
+                                class="w-full"
+                                @click="handleLogout"
+                            />
+                        </div>
+                    </Popover>
                 </div>
             </header>
 

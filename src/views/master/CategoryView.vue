@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 
 import Avatar from 'primevue/avatar'
 import Button from 'primevue/button'
@@ -24,6 +24,15 @@ import { useToast } from 'primevue/usetoast'
 
 import type { Category } from '@/types/category'
 
+import {
+  fetchCategories,
+  createCategory as apiCreateCategory,
+  updateCategory as apiUpdateCategory,
+  deleteCategory as apiDeleteCategory,
+} from '@/services/categoryService'
+import type { CreateCategoryPayload } from '@/services/categoryService'
+import { categorySchema, validateForm as zodValidateForm } from '@/utils/validation'
+
 /* =========================================================
  * SERVICES
  * ======================================================= */
@@ -37,10 +46,8 @@ const toast = useToast()
 
 interface CategoryForm {
   id: number | null
-  code: string
   name: string
   description: string
-  isActive: boolean
 }
 
 /* =========================================================
@@ -48,12 +55,10 @@ interface CategoryForm {
  * ======================================================= */
 
 const search = ref<string>('')
-
 const dialogVisible = ref<boolean>(false)
-
 const submitted = ref<boolean>(false)
-
 const editMode = ref<boolean>(false)
+const isLoading = ref<boolean>(false)
 
 /* =========================================================
  * FORM
@@ -61,69 +66,65 @@ const editMode = ref<boolean>(false)
 
 const form = reactive<CategoryForm>({
   id: null,
-  code: '',
   name: '',
   description: '',
-  isActive: true
 })
 
 /* =========================================================
- * CATEGORY DATA
- *
- * Nanti bagian ini bisa diganti dengan API.
+ * CATEGORY DATA — diambil dari API
  * ======================================================= */
 
-const categories = ref<Category[]>([
-  {
-    id: 1,
-    code: 'CAT-001',
-    name: 'Mesin',
-    description: 'Sparepart dan komponen mesin kendaraan.',
-    productCount: 42,
-    isActive: true
-  },
-  {
-    id: 2,
-    code: 'CAT-002',
-    name: 'Kelistrikan',
-    description: 'Komponen kelistrikan dan sistem elektronik kendaraan.',
-    productCount: 28,
-    isActive: true
-  },
-  {
-    id: 3,
-    code: 'CAT-003',
-    name: 'Kaki-Kaki',
-    description: 'Suspensi, shockbreaker, ball joint, dan komponen terkait.',
-    productCount: 36,
-    isActive: true
-  },
-  {
-    id: 4,
-    code: 'CAT-004',
-    name: 'Pelumas',
-    description: 'Oli mesin, oli transmisi, dan cairan kendaraan.',
-    productCount: 18,
-    isActive: true
-  },
-  {
-    id: 5,
-    code: 'CAT-005',
-    name: 'Aksesoris',
-    description: 'Aksesoris tambahan untuk kendaraan.',
-    productCount: 12,
-    isActive: false
+const categories = ref<Category[]>([])
+const page = ref<number>(1)
+const limit = ref<number>(10)
+const totalRecords = ref<number>(0)
+
+const loadCategories = async (): Promise<void> => {
+  isLoading.value = true
+  try {
+    const res = await fetchCategories({
+      q: search.value.trim(),
+      page: page.value,
+      limit: limit.value,
+    })
+    categories.value = res.data
+    totalRecords.value = res.meta.total
+  } catch (err) {
+    toast.add({
+      severity: 'error',
+      summary: 'Gagal memuat data',
+      detail: err instanceof Error ? err.message : 'Terjadi kesalahan saat memuat kategori.',
+      life: 4000,
+    })
+  } finally {
+    isLoading.value = false
   }
-])
+}
+
+let searchDebounce: ReturnType<typeof setTimeout> | null = null
+
+watch(search, () => {
+  if (searchDebounce) clearTimeout(searchDebounce)
+  searchDebounce = setTimeout(() => {
+    page.value = 1
+    loadCategories()
+  }, 400)
+})
+
+const onPage = (event: any) => {
+  page.value = event.page + 1
+  limit.value = event.rows
+  loadCategories()
+}
+
+onMounted(loadCategories)
 
 /* =========================================================
  * COMPUTED
  * ======================================================= */
 
 const filteredCategories = computed<Category[]>(() => {
-  const keyword = search.value
-    .trim()
-    .toLowerCase()
+  const keyword = search.value.trim().toLowerCase()
 
   if (!keyword) {
     return categories.value
@@ -131,21 +132,15 @@ const filteredCategories = computed<Category[]>(() => {
 
   return categories.value.filter((category) => {
     return (
-      category.code.toLowerCase().includes(keyword) ||
+      category.slug.toLowerCase().includes(keyword) ||
       category.name.toLowerCase().includes(keyword) ||
-      category.description.toLowerCase().includes(keyword)
+      (category.description && category.description.toLowerCase().includes(keyword))
     )
   })
 })
 
 const dialogTitle = computed<string>(() => {
-  return editMode.value
-    ? 'Edit Category'
-    : 'Tambah Category'
-})
-
-const isCodeInvalid = computed<boolean>(() => {
-  return submitted.value && !form.code.trim()
+  return editMode.value ? 'Edit Category' : 'Tambah Category'
 })
 
 const isNameInvalid = computed<boolean>(() => {
@@ -158,23 +153,16 @@ const isNameInvalid = computed<boolean>(() => {
 
 const resetForm = (): void => {
   form.id = null
-  form.code = ''
   form.name = ''
   form.description = ''
-  form.isActive = true
-
   submitted.value = false
 }
 
-const generateCategoryCode = (): string => {
-  const highestId = categories.value.reduce(
-    (highest, category) => {
-      return Math.max(highest, category.id)
-    },
-    0
-  )
-
-  return `CAT-${String(highestId + 1).padStart(3, '0')}`
+const generateSlug = (name: string): string => {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
 }
 
 /* =========================================================
@@ -183,30 +171,21 @@ const generateCategoryCode = (): string => {
 
 const openCreateDialog = (): void => {
   resetForm()
-
   editMode.value = false
-  form.code = generateCategoryCode()
-
   dialogVisible.value = true
 }
 
 const openEditDialog = (category: Category): void => {
   resetForm()
-
   editMode.value = true
-
   form.id = category.id
-  form.code = category.code
   form.name = category.name
-  form.description = category.description
-  form.isActive = category.isActive
-
+  form.description = category.description ?? ''
   dialogVisible.value = true
 }
 
 const closeDialog = (): void => {
   dialogVisible.value = false
-
   resetForm()
 }
 
@@ -214,37 +193,16 @@ const closeDialog = (): void => {
  * VALIDATION
  * ======================================================= */
 
+const errors = ref<Record<string, string>>({})
+
 const validateForm = (): boolean => {
   submitted.value = true
-
-  if (!form.code.trim()) {
-    return false
-  }
-
-  if (!form.name.trim()) {
-    return false
-  }
-
-  const duplicateCode = categories.value.find((category) => {
-    return (
-      category.code.toLowerCase() ===
-        form.code.trim().toLowerCase() &&
-      category.id !== form.id
-    )
+  const res = zodValidateForm(categorySchema, {
+    name: form.name,
+    description: form.description,
   })
-
-  if (duplicateCode) {
-    toast.add({
-      severity: 'warn',
-      summary: 'Kode sudah digunakan',
-      detail: `Kode ${form.code} sudah digunakan category lain.`,
-      life: 3000
-    })
-
-    return false
-  }
-
-  return true
+  errors.value = res.errors
+  return res.success
 }
 
 /* =========================================================
@@ -258,111 +216,77 @@ const saveCategory = (): void => {
 
   if (editMode.value && form.id !== null) {
     updateCategory()
-
     return
   }
 
   createCategory()
 }
 
-const createCategory = (): void => {
-  const nextId =
-    categories.value.reduce(
-      (highest, category) => {
-        return Math.max(highest, category.id)
-      },
-      0
-    ) + 1
-
-  const category: Category = {
-    id: nextId,
-    code: form.code.trim().toUpperCase(),
-    name: form.name.trim(),
-    description: form.description.trim(),
-    productCount: 0,
-    isActive: form.isActive
-  }
-
-  categories.value.unshift(category)
-
-  dialogVisible.value = false
-
-  toast.add({
-    severity: 'success',
-    summary: 'Berhasil',
-    detail: 'Category berhasil ditambahkan.',
-    life: 3000
-  })
-
-  resetForm()
-}
-
-const updateCategory = (): void => {
-  if (form.id === null) {
-    return
-  }
-
-  const categoryExists = categories.value.some(
-    (category) => category.id === form.id
-  )
-
-  if (!categoryExists) {
+const createCategory = async (): Promise<void> => {
+  isLoading.value = true
+  try {
+    const payload: CreateCategoryPayload = {
+      name: form.name.trim(),
+      slug: generateSlug(form.name.trim()),
+      description: form.description.trim(),
+    }
+    await apiCreateCategory(payload)
+    await loadCategories()
+    dialogVisible.value = false
+    toast.add({
+      severity: 'success',
+      summary: 'Berhasil',
+      detail: 'Category berhasil ditambahkan.',
+      life: 3000,
+    })
+    resetForm()
+  } catch (err) {
     toast.add({
       severity: 'error',
-      summary: 'Gagal',
-      detail: 'Category tidak ditemukan.',
-      life: 3000
+      summary: 'Gagal menyimpan',
+      detail: err instanceof Error ? err.message : 'Terjadi kesalahan.',
+      life: 4000,
     })
-
-    return
+  } finally {
+    isLoading.value = false
   }
+}
 
-  categories.value = categories.value.map(
-    (category): Category => {
-      if (category.id !== form.id) {
-        return category
-      }
-
-      return {
-        ...category,
-        code: form.code.trim().toUpperCase(),
-        name: form.name.trim(),
-        description: form.description.trim(),
-        isActive: form.isActive
-      }
-    }
-  )
-
-  dialogVisible.value = false
-
-  toast.add({
-    severity: 'success',
-    summary: 'Berhasil',
-    detail: 'Category berhasil diperbarui.',
-    life: 3000
-  })
-
-  resetForm()
+const updateCategory = async (): Promise<void> => {
+  if (form.id === null) return
+  isLoading.value = true
+  try {
+    await apiUpdateCategory(form.id, {
+      name: form.name.trim(),
+      slug: generateSlug(form.name.trim()),
+      description: form.description.trim(),
+    })
+    await loadCategories()
+    dialogVisible.value = false
+    toast.add({
+      severity: 'success',
+      summary: 'Berhasil',
+      detail: 'Category berhasil diperbarui.',
+      life: 3000,
+    })
+    resetForm()
+  } catch (err) {
+    toast.add({
+      severity: 'error',
+      summary: 'Gagal memperbarui',
+      detail: err instanceof Error ? err.message : 'Terjadi kesalahan.',
+      life: 4000,
+    })
+  } finally {
+    isLoading.value = false
+  }
 }
 
 /* =========================================================
  * DELETE
  * ======================================================= */
 
-const confirmDeleteCategory = (
-  category: Category
-): void => {
-  if (category.productCount > 0) {
-    toast.add({
-      severity: 'warn',
-      summary: 'Category tidak dapat dihapus',
-      detail: `${category.name} masih memiliki ${category.productCount} produk.`,
-      life: 4000
-    })
-
-    return
-  }
-
+const confirmDeleteCategory = (category: Category): void => {
   confirm.require({
     header: 'Hapus Category',
     message: `Apakah kamu yakin ingin menghapus category "${category.name}"?`,
@@ -371,24 +295,30 @@ const confirmDeleteCategory = (
     acceptLabel: 'Hapus',
     rejectProps: {
       severity: 'secondary',
-      outlined: true
+      outlined: true,
     },
     acceptProps: {
-      severity: 'danger'
+      severity: 'danger',
     },
-
-    accept: () => {
-      categories.value = categories.value.filter(
-        (item) => item.id !== category.id
-      )
-
-      toast.add({
-        severity: 'success',
-        summary: 'Berhasil',
-        detail: 'Category berhasil dihapus.',
-        life: 3000
-      })
-    }
+    accept: async () => {
+      try {
+        await apiDeleteCategory(category.id)
+        await loadCategories()
+        toast.add({
+          severity: 'success',
+          summary: 'Berhasil',
+          detail: 'Category berhasil dihapus.',
+          life: 3000,
+        })
+      } catch (err) {
+        toast.add({
+          severity: 'error',
+          summary: 'Gagal menghapus',
+          detail: err instanceof Error ? err.message : 'Terjadi kesalahan.',
+          life: 4000,
+        })
+      }
+    },
   })
 }
 </script>
@@ -404,13 +334,9 @@ const confirmDeleteCategory = (
     ====================================================== -->
 
     <div class="mb-4">
-      <h1 class="text-2xl font-bold text-900 m-0">
-        Master Category
-      </h1>
+      <h1 class="text-2xl font-bold text-900 m-0">Master Category</h1>
 
-      <p class="text-sm text-500 mt-2 mb-0">
-        Kelola category produk yang tersedia di sistem.
-      </p>
+      <p class="text-sm text-500 mt-2 mb-0">Kelola category produk yang tersedia di sistem.</p>
     </div>
 
     <!-- =====================================================
@@ -426,30 +352,18 @@ const confirmDeleteCategory = (
         <Toolbar class="mb-4">
           <template #start>
             <div class="flex align-items-center gap-2">
-              <Avatar
-                icon="pi pi-tags"
-                shape="square"
-                class="bg-blue-50 text-blue-600"
-              />
+              <Avatar icon="pi pi-tags" shape="square" class="bg-blue-50 text-blue-600" />
 
               <div>
-                <div class="font-semibold text-900">
-                  Daftar Category
-                </div>
+                <div class="font-semibold text-900">Daftar Category</div>
 
-                <div class="text-xs text-500 mt-1">
-                  {{ categories.length }} category terdaftar
-                </div>
+                <div class="text-xs text-500 mt-1">{{ totalRecords }} category terdaftar</div>
               </div>
             </div>
           </template>
 
           <template #end>
-            <Button
-              label="Tambah Category"
-              icon="pi pi-plus"
-              @click="openCreateDialog"
-            />
+            <Button label="Tambah Category" icon="pi pi-plus" @click="openCreateDialog" />
           </template>
         </Toolbar>
 
@@ -458,36 +372,13 @@ const confirmDeleteCategory = (
         ================================================== -->
 
         <div
-          class="
-            flex
-            flex-column
-            md:flex-row
-            md:align-items-center
-            md:justify-content-between
-            gap-3
-            mb-4
-          "
+          class="flex flex-column md:flex-row md:align-items-center md:justify-content-between gap-3 mb-4"
         >
           <IconField class="w-full md:w-20rem">
             <InputIcon class="pi pi-search" />
 
-            <InputText
-              v-model="search"
-              placeholder="Cari category..."
-              class="w-full"
-            />
+            <InputText v-model="search" placeholder="Cari category..." class="w-full" />
           </IconField>
-
-          <div class="flex align-items-center gap-2">
-            <span class="text-sm text-500">
-              Total
-            </span>
-
-            <Tag
-              :value="`${filteredCategories.length} category`"
-              severity="secondary"
-            />
-          </div>
         </div>
 
         <!-- =================================================
@@ -495,40 +386,32 @@ const confirmDeleteCategory = (
         ================================================== -->
 
         <DataTable
-          :value="filteredCategories"
+          :value="categories"
           data-key="id"
+          lazy
           paginator
-          :rows="10"
+          :first="(page - 1) * limit"
+          :rows="limit"
+          :total-records="totalRecords"
           :rows-per-page-options="[10, 25, 50]"
+          :loading="isLoading"
           striped-rows
           row-hover
           responsive-layout="scroll"
           class="w-full"
+          @page="onPage"
         >
-          <!-- CODE -->
+          <!-- SLUG -->
 
-          <Column
-            field="code"
-            header="KODE"
-            sortable
-            style="min-width: 9rem"
-          >
+          <Column field="slug" header="SLUG" sortable style="min-width: 10rem">
             <template #body="{ data }">
-              <Tag
-                :value="data.code"
-                severity="secondary"
-              />
+              <Tag :value="data.slug" severity="secondary" />
             </template>
           </Column>
 
           <!-- CATEGORY -->
 
-          <Column
-            field="name"
-            header="CATEGORY"
-            sortable
-            style="min-width: 15rem"
-          >
+          <Column field="name" header="CATEGORY" sortable style="min-width: 15rem">
             <template #body="{ data }">
               <div class="flex align-items-center gap-3">
                 <Avatar
@@ -543,14 +426,7 @@ const confirmDeleteCategory = (
                   </div>
 
                   <div
-                    class="
-                      text-xs
-                      text-500
-                      mt-1
-                      white-space-nowrap
-                      overflow-hidden
-                      text-overflow-ellipsis
-                    "
+                    class="text-xs text-500 mt-1 white-space-nowrap overflow-hidden text-overflow-ellipsis"
                   >
                     {{ data.description || '-' }}
                   </div>
@@ -559,52 +435,9 @@ const confirmDeleteCategory = (
             </template>
           </Column>
 
-          <!-- PRODUCT COUNT -->
-
-          <Column
-            field="productCount"
-            header="PRODUK"
-            sortable
-            style="min-width: 8rem"
-          >
-            <template #body="{ data }">
-              <div class="flex align-items-center gap-2">
-                <i class="pi pi-box text-500" />
-
-                <span class="text-sm text-900">
-                  {{ data.productCount }}
-                </span>
-              </div>
-            </template>
-          </Column>
-
-          <!-- STATUS -->
-
-          <Column
-            field="isActive"
-            header="STATUS"
-            sortable
-            style="min-width: 8rem"
-          >
-            <template #body="{ data }">
-              <Tag
-                :value="data.isActive ? 'Aktif' : 'Nonaktif'"
-                :severity="
-                  data.isActive
-                    ? 'success'
-                    : 'secondary'
-                "
-                rounded
-              />
-            </template>
-          </Column>
-
           <!-- ACTION -->
 
-          <Column
-            header="AKSI"
-            style="width: 8rem"
-          >
+          <Column header="AKSI" style="width: 8rem">
             <template #body="{ data }">
               <div class="flex align-items-center gap-1">
                 <Button
@@ -631,16 +464,7 @@ const confirmDeleteCategory = (
           <!-- EMPTY -->
 
           <template #empty>
-            <div
-              class="
-                flex
-                flex-column
-                align-items-center
-                justify-content-center
-                gap-3
-                py-6
-              "
-            >
+            <div class="flex flex-column align-items-center justify-content-center gap-3 py-6">
               <Avatar
                 icon="pi pi-search"
                 shape="circle"
@@ -649,13 +473,9 @@ const confirmDeleteCategory = (
               />
 
               <div class="text-center">
-                <div class="font-semibold text-900">
-                  Category tidak ditemukan
-                </div>
+                <div class="font-semibold text-900">Category tidak ditemukan</div>
 
-                <div class="text-sm text-500 mt-1">
-                  Coba gunakan kata pencarian yang berbeda.
-                </div>
+                <div class="text-sm text-500 mt-1">Coba gunakan kata pencarian yang berbeda.</div>
               </div>
             </div>
           </template>
@@ -677,43 +497,10 @@ const confirmDeleteCategory = (
       @hide="resetForm"
     >
       <div class="flex flex-column gap-4">
-        <!-- CODE -->
-
-        <div class="flex flex-column gap-2">
-          <label
-            for="category-code"
-            class="text-sm font-medium text-900"
-          >
-            Kode Category
-          </label>
-
-          <InputText
-            id="category-code"
-            v-model="form.code"
-            :invalid="isCodeInvalid"
-            autocomplete="off"
-            class="w-full"
-          />
-
-          <Message
-            v-if="isCodeInvalid"
-            severity="error"
-            variant="simple"
-            size="small"
-          >
-            Kode category wajib diisi.
-          </Message>
-        </div>
-
         <!-- NAME -->
 
         <div class="flex flex-column gap-2">
-          <label
-            for="category-name"
-            class="text-sm font-medium text-900"
-          >
-            Nama Category
-          </label>
+          <label for="category-name" class="text-sm font-medium text-900"> Nama Category </label>
 
           <InputText
             id="category-name"
@@ -724,12 +511,7 @@ const confirmDeleteCategory = (
             class="w-full"
           />
 
-          <Message
-            v-if="isNameInvalid"
-            severity="error"
-            variant="simple"
-            size="small"
-          >
+          <Message v-if="isNameInvalid" severity="error" variant="simple" size="small">
             Nama category wajib diisi.
           </Message>
         </div>
@@ -737,12 +519,7 @@ const confirmDeleteCategory = (
         <!-- DESCRIPTION -->
 
         <div class="flex flex-column gap-2">
-          <label
-            for="category-description"
-            class="text-sm font-medium text-900"
-          >
-            Deskripsi
-          </label>
+          <label for="category-description" class="text-sm font-medium text-900"> Deskripsi </label>
 
           <Textarea
             id="category-description"
@@ -753,69 +530,16 @@ const confirmDeleteCategory = (
             class="w-full"
           />
         </div>
-
-        <Divider class="my-1" />
-
-        <!-- STATUS -->
-
-        <div
-          class="
-            flex
-            align-items-center
-            justify-content-between
-            gap-3
-          "
-        >
-          <div>
-            <div class="text-sm font-medium text-900">
-              Status Category
-            </div>
-
-            <div class="text-xs text-500 mt-1">
-              Category aktif dapat digunakan pada produk.
-            </div>
-          </div>
-
-          <div class="flex align-items-center gap-2">
-            <span
-              class="text-sm"
-              :class="
-                form.isActive
-                  ? 'text-green-600'
-                  : 'text-500'
-              "
-            >
-              {{ form.isActive ? 'Aktif' : 'Nonaktif' }}
-            </span>
-
-            <ToggleSwitch
-              v-model="form.isActive"
-            />
-          </div>
-        </div>
       </div>
 
       <!-- FOOTER -->
 
       <template #footer>
-        <Button
-          label="Batal"
-          severity="secondary"
-          outlined
-          @click="closeDialog"
-        />
+        <Button label="Batal" severity="secondary" outlined @click="closeDialog" />
 
         <Button
-          :label="
-            editMode
-              ? 'Simpan Perubahan'
-              : 'Tambah Category'
-          "
-          :icon="
-            editMode
-              ? 'pi pi-check'
-              : 'pi pi-plus'
-          "
+          :label="editMode ? 'Simpan Perubahan' : 'Tambah Category'"
+          :icon="editMode ? 'pi pi-check' : 'pi pi-plus'"
           @click="saveCategory"
         />
       </template>

@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import AppLayout from '@/layouts/AppLayout.vue'
+import { getSession } from '@/services/authService'
 
 const router = createRouter({
     history: createWebHistory(import.meta.env.BASE_URL),
@@ -8,7 +9,38 @@ const router = createRouter({
     routes: [
         {
             path: '/',
+            name: 'landing',
+            component: () => import('@/views/LandingView.vue'),
+        },
+        {
+            path: '/login',
+            name: 'login',
+            component: () => import('@/views/LoginView.vue'),
+        },
+        {
+            path: '/register',
+            name: 'register',
+            component: () => import('@/views/RegisterView.vue'),
+        },
+        {
+            path: '/payment/finish',
+            name: 'payment-finish',
+            component: () => import('@/views/PaymentFinishView.vue'),
+        },
+        {
+            path: '/payment/status',
+            name: 'payment-status',
+            component: () => import('@/views/PaymentFinishView.vue'),
+        },
+        {
+            path: '/payment/redirect',
+            name: 'payment-redirect',
+            component: () => import('@/views/PaymentFinishView.vue'),
+        },
+        {
+            path: '/admin',
             component: AppLayout,
+            meta: { requiresAuth: true, requiresAdmin: true },
 
             children: [
                 {
@@ -24,31 +56,65 @@ const router = createRouter({
                 },
 
                 {
-                    path: 'products',
-                    name: 'products',
-                    component: () => import('@/views/ProductView.vue'),
+                    path: '/master/products',
+                    name: 'master-products',
+                    component: () => import('@/views/master/ProductView.vue'),
                 },
-
                 {
-                    path: 'customers',
-                    name: 'customers',
-                    component: () => import('@/views/CustomerView.vue'),
+                    path: '/master/customers',
+                    name: 'master-customers',
+                    component: () => import('@/views/master/CustomerView.vue'),
                 },
-
                 {
-                    path: 'orders',
+                    path: '/master/users',
+                    name: 'master-users',
+                    component: () => import('@/views/master/UserView.vue'),
+                },
+                {
+                    path: '/orders',
                     name: 'orders',
                     component: () => import('@/views/OrderView.vue'),
                 },
 
                 {
-                    path: 'reports',
+                    path: '/reports',
                     name: 'reports',
                     component: () => import('@/views/ReportView.vue'),
                 },
             ],
         },
     ],
+})
+
+router.beforeEach((to, _from, next) => {
+    const session = getSession()
+
+    // Check if route or any matched route requires admin or auth
+    const requiresAdmin = to.matched.some((record) => record.meta.requiresAdmin)
+    const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
+
+    if (requiresAuth || requiresAdmin) {
+        if (!session || session.isGuest) {
+            return next({ name: 'login' })
+        }
+
+        if (requiresAdmin) {
+            const role = (session.role || '').toLowerCase()
+            if (role !== 'admin') {
+                return next({ name: 'landing' })
+            }
+        }
+    }
+
+    // Redirect logged-in admin away from login page to dashboard
+    if (to.name === 'login' && session && !session.isGuest) {
+        const role = (session.role || '').toLowerCase()
+        if (role === 'admin') {
+            return next({ name: 'dashboard' })
+        }
+    }
+
+    next()
 })
 
 export default router

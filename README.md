@@ -44,8 +44,8 @@ Make sure you have the following installed on your machine:
 ### 1. Clone the repository
 
 ```bash
-git clone <repository-url>
-cd autoparts-fe
+git clone https://github.com/LouisSoe/NiagaAutoparts_FE
+cd NiagaAutoparts_FE
 ```
 
 ### 2. Install dependencies

@@ -182,18 +182,26 @@ const loadReportData = async (): Promise<void> => {
         });
         monthlyRevenue.value = monthlyList.length > 0 ? monthlyList : monthNames.slice(0, 6).map(m => ({ label: m, value: 0 }));
 
-        // 4. Category distribution from order items
+        // 4. Category distribution from order items & products
+        const productsMap = new Map<number, string>();
+        if (productsRes.status === 'fulfilled') {
+            productsRes.value.data.forEach((p) => {
+                const catName = p.categoryName || p.category || 'Lainnya';
+                productsMap.set(p.id, catName);
+            });
+        }
+
         const catMap = new Map<string, number>();
         filteredOrders.forEach((o) => {
             if (o.items) {
                 o.items.forEach((item) => {
-                    const catName = 'Sparepart';
+                    const catName = productsMap.get(item.product_id) || 'Lainnya';
                     catMap.set(catName, (catMap.get(catName) || 0) + item.subtotal);
                 });
             }
         });
 
-        const colors = ['#2563eb', '#111827', '#374151', '#737373', '#059669'];
+        const colors = ['#2563eb', '#111827', '#374151', '#737373', '#059669', '#d97706', '#dc2626'];
         const catList: CategoryItem[] = [];
         let totalVal = 0;
         catMap.forEach((val) => { totalVal += val; });
@@ -205,11 +213,7 @@ const loadReportData = async (): Promise<void> => {
             colorIdx++;
         });
 
-        categoryItems.value = catList.length > 0 ? catList : [
-            { name: 'Suku Cadang', value: 60, color: '#2563eb' },
-            { name: 'Oli & Pelumas', value: 25, color: '#111827' },
-            { name: 'Lainnya', value: 15, color: '#737373' }
-        ];
+        categoryItems.value = catList;
 
     } catch (err) {
         console.error('[ReportView] Error loading report data:', err);

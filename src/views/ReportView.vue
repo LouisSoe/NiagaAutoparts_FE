@@ -120,6 +120,18 @@ const loadReportData = async (): Promise<void> => {
             return dateStr >= startStr && dateStr <= endStr;
         });
 
+        // Map product purchase_price
+        const productMap = new Map<number, any>();
+        let lowStockCount = 0;
+        if (productsRes.status === 'fulfilled') {
+            productsRes.value.data.forEach((p) => {
+                productMap.set(p.id, p);
+            });
+            lowStockCount = productsRes.value.data.filter(
+                (p) => (p.stock - (p.reserved ?? 0)) <= (p.minimumStock || 5)
+            ).length;
+        }
+
         // 1. Calculate Summary
         let grossRev = 0;
         let totalCost = 0;
@@ -129,16 +141,18 @@ const loadReportData = async (): Promise<void> => {
 
         validPaidOrders.forEach((o) => {
             grossRev += o.total_price;
-            // Estimate cost as 75% if detail is unavailable
-            totalCost += o.total_price * 0.75;
+            let orderCost = 0;
+            if (o.items && o.items.length > 0) {
+                o.items.forEach((it) => {
+                    const prod = productMap.get(it.product_id);
+                    const buyPrice = prod?.purchase_price ?? prod?.purchasePrice ?? (it.unit_price * 0.7);
+                    orderCost += buyPrice * it.quantity;
+                });
+            } else {
+                orderCost = o.total_price * 0.7;
+            }
+            totalCost += orderCost;
         });
-
-        let lowStockCount = 0;
-        if (productsRes.status === 'fulfilled') {
-            lowStockCount = productsRes.value.data.filter(
-                (p) => (p.stock - (p.reserved ?? 0)) <= (p.minimumStock || 5)
-            ).length;
-        }
 
         const margin = grossRev > 0 ? Math.round(((grossRev - totalCost) / grossRev) * 100 * 10) / 10 : 0;
 
@@ -551,7 +565,7 @@ const handleExportPdf = (): void => {
             >
                 <Card
                     :class="[
-                        'h-full shadow-none border-1 surface-border',
+                        'h-full shadow-none border-none',
                         item.borderClass
                     ]"
                 >

@@ -92,6 +92,9 @@ export interface FetchOrdersParams {
   page?: number
   limit?: number
   user_id?: number
+  date?: string
+  start_date?: string
+  end_date?: string
 }
 
 export interface FetchOrdersResult {
@@ -111,6 +114,9 @@ export async function fetchOrders(
   if (params?.q) queryParams.append('q', params.q)
   if (params?.status) queryParams.append('status', params.status)
   if (params?.user_id) queryParams.append('user_id', String(params.user_id))
+  if (params?.date) queryParams.append('date', params.date)
+  if (params?.start_date) queryParams.append('start_date', params.start_date)
+  if (params?.end_date) queryParams.append('end_date', params.end_date)
   if (params?.page) queryParams.append('page', String(params.page))
   if (params?.limit) queryParams.append('limit', String(params.limit))
 

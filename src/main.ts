@@ -11,6 +11,7 @@ import router from './router'
 
 import 'primeicons/primeicons.css'
 import 'primeflex/primeflex.css'
+import '@/assets/main.css'
 
 const app = createApp(App)
 

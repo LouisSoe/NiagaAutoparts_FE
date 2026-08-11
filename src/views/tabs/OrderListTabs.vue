@@ -4,6 +4,7 @@ import Avatar from 'primevue/avatar'
 import Button from 'primevue/button'
 import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
+import DatePicker from 'primevue/datepicker'
 import Dialog from 'primevue/dialog'
 import Divider from 'primevue/divider'
 import IconField from 'primevue/iconfield'
@@ -15,7 +16,7 @@ import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
 
 import type { Order, StatusFilter, StatusFilterOption } from '@/types/order'
-import { fetchOrders, deleteOrder as apiDeleteOrder } from '@/services/orderService'
+import { fetchOrders, deleteOrder as apiDeleteOrder, type FetchOrdersParams } from '@/services/orderService'
 import { formatCurrencyIDR, formatNumberID } from '@/utils/format'
 import { formatDateTimeID } from '@/utils/date'
 
@@ -27,6 +28,7 @@ const confirm = useConfirm()
 
 const search = ref<string>('')
 const selectedStatusFilter = ref<StatusFilter>('all')
+const selectedDates = ref<(Date | null)[] | Date | null>(null)
 
 const statusFilterOptions: StatusFilterOption[] = [
   { label: 'Semua Status', value: 'all' },
@@ -52,15 +54,39 @@ const showOrderDetails = (order: Order): void => {
   detailDialogVisible.value = true
 }
 
+const formatDateToYYYYMMDD = (date: Date): string => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 const loadOrders = async (): Promise<void> => {
   isLoading.value = true
   try {
-    const res = await fetchOrders({
+    const params: FetchOrdersParams = {
       q: search.value.trim() || undefined,
       status: selectedStatusFilter.value === 'all' ? undefined : selectedStatusFilter.value,
       page: page.value,
       limit: limit.value,
-    })
+    }
+
+    if (selectedDates.value) {
+      if (Array.isArray(selectedDates.value)) {
+        const d1 = selectedDates.value[0]
+        const d2 = selectedDates.value[1]
+        if (d1 && d2) {
+          params.start_date = formatDateToYYYYMMDD(d1)
+          params.end_date = formatDateToYYYYMMDD(d2)
+        } else if (d1) {
+          params.date = formatDateToYYYYMMDD(d1)
+        }
+      } else if (selectedDates.value instanceof Date) {
+        params.date = formatDateToYYYYMMDD(selectedDates.value)
+      }
+    }
+
+    const res = await fetchOrders(params)
     orders.value = res.data
     totalRecords.value = res.meta.total
   } catch (err) {
@@ -90,6 +116,11 @@ watch(selectedStatusFilter, () => {
   loadOrders()
 })
 
+watch(selectedDates, () => {
+  page.value = 1
+  loadOrders()
+})
+
 const onPage = (event: any) => {
   page.value = event.page + 1
   limit.value = event.rows
@@ -104,6 +135,7 @@ onMounted(loadOrders)
 const resetFilters = (): void => {
   search.value = ''
   selectedStatusFilter.value = 'all'
+  selectedDates.value = null
 }
 
 const getStatusSeverity = (status: string): 'success' | 'warn' | 'danger' | 'info' => {
@@ -162,7 +194,7 @@ const confirmDeleteOrder = (order: Order): void => {
     <div class="flex flex-column xl:flex-row xl:align-items-center gap-3 mb-4">
       <div class="flex flex-column md:flex-row gap-2 flex-1 min-w-0">
         <!-- SEARCH -->
-        <IconField class="w-full md:w-20rem">
+        <IconField class="w-full md:w-16rem">
           <InputIcon class="pi pi-search" />
           <InputText
             v-model="search"
@@ -177,7 +209,18 @@ const confirmDeleteOrder = (order: Order): void => {
           :options="statusFilterOptions"
           option-label="label"
           option-value="value"
-          class="w-full md:w-12rem"
+          class="w-full md:w-11rem"
+        />
+
+        <!-- DATE / DATE RANGE FILTER -->
+        <DatePicker
+          v-model="selectedDates"
+          selectionMode="range"
+          dateFormat="yy-mm-dd"
+          placeholder="Filter Tanggal..."
+          showIcon
+          showButtonBar
+          class="w-full md:w-16rem"
         />
       </div>
 
@@ -209,8 +252,14 @@ const confirmDeleteOrder = (order: Order): void => {
       class="w-full"
       @page="onPage"
     >
-      <!-- NO / ID -->
-      <Column field="id" header="ID" sortable style="width: 4rem" />
+      <!-- NO -->
+      <Column header="NO" style="width: 4rem">
+        <template #body="{ index }">
+          <span class="text-sm font-medium text-700">
+            {{ (page - 1) * limit + index + 1 }}
+          </span>
+        </template>
+      </Column>
 
       <!-- ORDER NUMBER -->
       <Column field="order_number" header="ORDER NUMBER" sortable style="min-width: 13rem">
@@ -280,6 +329,7 @@ const confirmDeleteOrder = (order: Order): void => {
               @click="showOrderDetails(data)"
             />
             <Button
+              v-if="['cancelled', 'dibatalkan'].includes(data.status.toLowerCase())"
               icon="pi pi-trash"
               severity="danger"
               text

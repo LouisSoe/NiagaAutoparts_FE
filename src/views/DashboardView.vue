@@ -18,7 +18,8 @@ import type {
 
 import {
   formatCurrencyIDR,
-  getInitials
+  getInitials,
+  formatDateID
 } from '@/utils/format'
 
 import { fetchProducts } from '@/services/productService'
@@ -64,6 +65,12 @@ interface CriticalStock {
   icon: string
 }
 
+interface TransactionItem {
+  name: string
+  quantity: number
+  unitPrice: number
+}
+
 interface Transaction {
   id: number
   orderNumber: string
@@ -72,6 +79,8 @@ interface Transaction {
   sku: string
   status: TransactionStatus
   total: number
+  createdAt: string
+  items: TransactionItem[]
 }
 
 /* =========================================================
@@ -338,15 +347,30 @@ const loadDashboardData = async () => {
       daySalesMap.value = days
 
       recentTransactions.value = allOrders.slice(0, 10).map((ord) => {
-        const firstItem = ord.items && ord.items.length > 0 ? ord.items[0] : null
+        const formattedItems: TransactionItem[] = (ord.items || []).map((it) => ({
+          name: it.product_name || `Produk #${it.product_id}`,
+          quantity: it.quantity,
+          unitPrice: it.unit_price,
+        }))
+
+        const firstItem = formattedItems[0]
+        let productLabel = 'Tanpa Item'
+        if (formattedItems.length === 1) {
+          productLabel = firstItem.name
+        } else if (formattedItems.length > 1) {
+          productLabel = `${firstItem.name} +${formattedItems.length - 1} produk lainnya`
+        }
+
         return {
           id: ord.id,
           orderNumber: ord.order_number,
           customer: ord.user_id ? `User #${ord.user_id}` : (ord.notes?.split(';')[0] || 'Pelanggan Umum'),
-          product: firstItem ? firstItem.product_name || `Produk #${firstItem.product_id}` : 'Order Multiple Items',
-          sku: firstItem ? `SKU-${firstItem.product_id}` : ord.source,
+          product: productLabel,
+          sku: firstItem ? `SKU-${ord.id}` : ord.source,
           status: mapBackendStatus(ord.status),
-          total: ord.total_price
+          total: ord.total_price,
+          createdAt: formatDateID(ord.created_at),
+          items: formattedItems
         }
       })
     }
@@ -625,7 +649,21 @@ onMounted(() => {
                   </span>
                 </template>
               </Column>
+              <!-- TANGGAL -->
 
+              <Column
+                field="createdAt"
+                header="TANGGAL"
+                style="min-width: 10rem"
+              >
+                <template
+                  #body="{ data }: { data: Transaction }"
+                >
+                  <span class="text-sm font-medium text-700">
+                    {{ data.createdAt }}
+                  </span>
+                </template>
+              </Column>
               <!-- CUSTOMER -->
 
               <Column
@@ -664,14 +702,22 @@ onMounted(() => {
                 <template
                   #body="{ data }: { data: Transaction }"
                 >
-                  <div class="flex flex-column gap-1">
-                    <span class="text-sm text-900">
-                      {{ data.product }}
-                    </span>
-
-                    <span class="text-xs text-500">
-                      {{ data.sku }}
-                    </span>
+                  <div v-if="data.items && data.items.length > 0" class="flex flex-column gap-1">
+                    <div
+                      v-for="(item, idx) in data.items"
+                      :key="idx"
+                      class="flex align-items-center justify-content-between gap-2 text-xs"
+                    >
+                      <span class="font-medium text-900 line-clamp-1">
+                        • {{ item.name }}
+                      </span>
+                      <span class="text-500 font-semibold flex-shrink-0">
+                        x{{ item.quantity }}
+                      </span>
+                    </div>
+                  </div>
+                  <div v-else class="text-sm text-900">
+                    {{ data.product }}
                   </div>
                 </template>
               </Column>

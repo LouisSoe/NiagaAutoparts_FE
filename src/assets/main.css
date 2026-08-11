@@ -47,3 +47,8 @@ select {
 a {
     color: inherit;
 }
+
+/* Global override: Reset default border on PrimeVue Card components */
+.p-card {
+    border: none !important;
+}

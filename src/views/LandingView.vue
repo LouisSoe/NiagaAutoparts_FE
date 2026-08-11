@@ -296,6 +296,11 @@ const createdOrderStatus = ref('')
 const lastCreatedOrderId = ref<number | null>(null)
 const lastCreatedSnapToken = ref<string | null>(null)
 
+const failedImageMap = ref<Record<number | string, boolean>>({})
+const handleImageError = (productId: number | string) => {
+  failedImageMap.value[productId] = true
+}
+
 /* =========================================================
  * PROFILE MODAL STATE & LOGIC
  * ======================================================= */
@@ -987,11 +992,12 @@ onMounted(async () => {
               <template #header>
                 <div class="relative surface-100 overflow-hidden" style="height: 8.5rem">
                   <Image
-                    v-if="product.imageUrl"
+                    v-if="product.imageUrl && !failedImageMap[product.id]"
                     :src="product.imageUrl"
                     :alt="product.name"
                     imageClass="w-full h-full object-cover"
                     :imageStyle="{ height: '8.5rem', width: '100%', objectFit: 'cover' }"
+                    @error="handleImageError(product.id)"
                   />
                   <div
                     v-else

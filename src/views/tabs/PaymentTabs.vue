@@ -51,6 +51,11 @@ const categories = ref<CategoryOption[]>([]);
 const products = ref<Product[]>([]);
 const cart = ref<CartItem[]>([]);
 
+const failedImageMap = ref<Record<number | string, boolean>>({});
+const handleImageError = (productId: number | string) => {
+  failedImageMap.value[productId] = true;
+};
+
 /* =========================================================
  * LOAD DATA
  * ======================================================= */
@@ -384,11 +389,12 @@ const handleSkipReceipt = (): void => {
                         <!-- Header / Image Area -->
                         <div class="relative surface-100 overflow-hidden" style="height: 8.5rem">
                             <Image
-                                v-if="product.imageUrl"
+                                v-if="product.imageUrl && !failedImageMap[product.id]"
                                 :src="product.imageUrl"
                                 :alt="product.name"
                                 image-class="w-full h-full"
                                 :image-style="{ height: '8.5rem', width: '100%', objectFit: 'cover' }"
+                                @error="handleImageError(product.id)"
                             />
                             <div
                                 v-else

@@ -293,6 +293,8 @@ const customerForm = ref({
 const paymentMethod = ref<'midtrans' | 'cash'>('midtrans')
 const createdOrderNumber = ref('')
 const createdOrderStatus = ref('')
+const lastCreatedOrderId = ref<number | null>(null)
+const lastCreatedSnapToken = ref<string | null>(null)
 
 /* =========================================================
  * PROFILE MODAL STATE & LOGIC
@@ -535,11 +537,13 @@ const handleProcessCheckout = async (): Promise<void> => {
     const order = await createOrder(payload)
     createdOrderNumber.value = order.order_number
     createdOrderStatus.value = paymentMethod.value === 'midtrans' ? 'Menunggu Pembayaran Midtrans' : 'Menunggu Konfirmasi Admin / Ambil di Toko'
+    lastCreatedOrderId.value = order.id
 
     if (paymentMethod.value === 'midtrans') {
       try {
         await loadSnapScript()
         const snap = await createSnapToken(order.id)
+        lastCreatedSnapToken.value = snap.token
 
         isCheckoutModalOpen.value = false
 
@@ -573,6 +577,8 @@ const handleProcessCheckout = async (): Promise<void> => {
                 detail: 'Proses pembayaran Midtrans mengalami kendala.',
                 life: 4000,
               })
+              createdOrderStatus.value = 'Pembayaran Gagal'
+              isSuccessModalOpen.value = true
             },
             onClose: () => {
               toast.add({
@@ -615,6 +621,101 @@ const handleProcessCheckout = async (): Promise<void> => {
     })
   } finally {
     isSubmittingCheckout.value = false
+  }
+}
+
+const reopenMidtransPayment = async (): Promise<void> => {
+  if (!lastCreatedOrderId.value) {
+    if (createdOrderNumber.value) {
+      router.push({ name: 'payment-finish', query: { order_id: createdOrderNumber.value } })
+    }
+    return
+  }
+
+  isSuccessModalOpen.value = false
+
+  try {
+    await loadSnapScript()
+    let token = lastCreatedSnapToken.value
+    if (!token) {
+      const snapRes = await createSnapToken(lastCreatedOrderId.value)
+      token = snapRes.token
+      lastCreatedSnapToken.value = token
+    }
+
+    if ((window as any).snap && token) {
+      ;(window as any).snap.pay(token, {
+        onSuccess: () => {
+          toast.add({
+            severity: 'success',
+            summary: 'Pembayaran Berhasil',
+            detail: `Pesanan ${createdOrderNumber.value} telah berhasil dibayar!`,
+            life: 5000,
+          })
+          createdOrderStatus.value = 'Pembayaran Lunas (Paid)'
+          isSuccessModalOpen.value = true
+        },
+        onPending: () => {
+          toast.add({
+            severity: 'info',
+            summary: 'Menunggu Pembayaran',
+            detail: `Silakan selesaikan pembayaran untuk pesanan ${createdOrderNumber.value}.`,
+            life: 5000,
+          })
+          createdOrderStatus.value = 'Menunggu Pembayaran Midtrans'
+          isSuccessModalOpen.value = true
+        },
+        onError: () => {
+          toast.add({
+            severity: 'error',
+            summary: 'Pembayaran Gagal',
+            detail: 'Proses pembayaran Midtrans mengalami kendala.',
+            life: 4000,
+          })
+          createdOrderStatus.value = 'Pembayaran Gagal'
+          isSuccessModalOpen.value = true
+        },
+        onClose: () => {
+          toast.add({
+            severity: 'warn',
+            summary: 'Popup Ditutup',
+            detail: `Pesanan ${createdOrderNumber.value} tersimpan. Anda dapat membayar sewaktu-waktu.`,
+            life: 4000,
+          })
+          createdOrderStatus.value = 'Menunggu Pembayaran Midtrans'
+          isSuccessModalOpen.value = true
+        },
+      })
+    }
+  } catch (err: any) {
+    console.warn('[LandingView] Failed to generate Snap Token, checking latest order status from server:', err)
+    if (lastCreatedOrderId.value) {
+      try {
+        const latestOrder = await fetchOrderById(lastCreatedOrderId.value)
+        const status = (latestOrder.status || '').toLowerCase()
+        if (['paid', 'settlement', 'success', 'completed'].includes(status)) {
+          createdOrderStatus.value = 'Pembayaran Lunas (Paid)'
+          toast.add({
+            severity: 'success',
+            summary: 'Pembayaran Berhasil',
+            detail: `Pesanan ${latestOrder.order_number} telah berhasil dibayar!`,
+            life: 5000,
+          })
+        } else {
+          createdOrderStatus.value = latestOrder.status
+        }
+        isSuccessModalOpen.value = true
+        return
+      } catch (checkErr) {
+        console.error('[LandingView] Error checking order status:', checkErr)
+      }
+    }
+    toast.add({
+      severity: 'error',
+      summary: 'Midtrans Error',
+      detail: err.message || 'Gagal membuka kembali pembayaran Midtrans.',
+      life: 4000,
+    })
   }
 }
 
@@ -1200,39 +1301,86 @@ onMounted(async () => {
       v-model:visible="isSuccessModalOpen"
       modal
       header="Status Pesanan"
-      style="width: 28rem"
+      style="width: 90vw; max-width: 28rem;"
+      class="border-round-2xl"
     >
-      <div class="flex flex-column align-items-center justify-content-center text-center gap-3 py-3">
-        <div class="bg-green-100 border-circle p-3 flex align-items-center justify-content-center" style="width: 4.5rem; height: 4.5rem">
-          <i class="pi pi-check-circle text-4xl text-green-600" />
+      <div class="flex flex-column align-items-center justify-content-center text-center gap-3 py-2">
+        <!-- Dynamic Status Icon -->
+        <div 
+          class="border-circle p-3 flex align-items-center justify-content-center"
+          :class="[
+            createdOrderStatus.includes('Lunas') || createdOrderStatus.includes('Paid') ? 'bg-green-100' :
+            createdOrderStatus.includes('Gagal') ? 'bg-red-100' : 'bg-orange-100'
+          ]"
+          style="width: 4.5rem; height: 4.5rem"
+        >
+          <i 
+            :class="[
+              createdOrderStatus.includes('Lunas') || createdOrderStatus.includes('Paid') ? 'pi pi-check-circle text-green-600' :
+              createdOrderStatus.includes('Gagal') ? 'pi pi-times-circle text-red-600' : 'pi pi-clock text-orange-600',
+              'text-4xl'
+            ]" 
+          />
         </div>
+
         <div>
-          <h3 class="text-xl font-bold text-900 m-0 mb-1">Pesanan Berhasil Dibuat!</h3>
+          <h3 class="text-xl font-bold text-900 m-0 mb-1">
+            {{ createdOrderStatus.includes('Lunas') ? 'Pembayaran Berhasil!' : 'Pesanan Berhasil Dibuat!' }}
+          </h3>
           <p class="text-sm text-600 m-0">Kode Pesanan Anda:</p>
-          <div class="text-lg font-mono font-bold text-blue-600 bg-blue-50 py-1.5 px-3 border-round-lg border-1 border-blue-200 mt-1 inline-block">
+          <div class="text-lg font-mono font-bold text-blue-600 bg-blue-50 py-1.5 px-3 border-round-lg border-1 border-blue-200 mt-1.5 inline-block">
             {{ createdOrderNumber }}
           </div>
         </div>
 
-        <div class="surface-100 border-round-xl p-3 text-left w-full flex flex-column gap-1 text-xs text-700">
-          <div class="flex justify-content-between">
+        <div class="surface-100 border-round-xl p-3 text-left w-full flex flex-column gap-1.5 text-xs text-700">
+          <div class="flex justify-content-between align-items-center">
             <span class="text-500">Status Pembayaran:</span>
-            <span class="font-bold text-blue-700">{{ createdOrderStatus }}</span>
+            <Tag 
+              :severity="
+                createdOrderStatus.includes('Lunas') ? 'success' :
+                createdOrderStatus.includes('Gagal') ? 'danger' : 'warn'
+              "
+              :value="createdOrderStatus"
+              class="text-xs uppercase"
+            />
           </div>
-          <div class="flex justify-content-between">
-            <span class="text-500">Metode:</span>
-            <span class="font-semibold uppercase">{{ paymentMethod }}</span>
+          <div class="flex justify-content-between align-items-center">
+            <span class="text-500">Metode Pembayaran:</span>
+            <span class="font-semibold uppercase text-800">{{ paymentMethod }}</span>
           </div>
         </div>
 
         <p class="text-xs text-500 m-0 line-height-3">
-          Tunjukkan Kode Pesanan di atas saat datang ke toko untuk pengambilan barang. Reservasi stok berlaku selama 15 menit.
+          <template v-if="createdOrderStatus.includes('Menunggu')">
+            Pesanan Anda telah tersimpan. Silakan selesaikan pembayaran atau tunjukkan Kode Pesanan di atas saat mengambil barang di toko.
+          </template>
+          <template v-else-if="createdOrderStatus.includes('Lunas')">
+            Terima kasih! Pembayaran Anda telah kami terima. Tunjukkan Kode Pesanan di atas saat datang ke toko untuk pengambilan barang.
+          </template>
+          <template v-else>
+            Tunjukkan Kode Pesanan di atas saat datang ke toko untuk pengambilan barang. Reservasi stok berlaku selama 15 menit.
+          </template>
         </p>
       </div>
 
       <template #footer>
-        <div class="flex justify-content-center w-full">
-          <Button label="Kembali ke Katalog" severity="primary" class="w-full font-semibold" @click="isSuccessModalOpen = false" />
+        <div class="flex flex-column sm:flex-row gap-2 w-full pt-1">
+          <Button 
+            v-if="createdOrderStatus.includes('Menunggu') && paymentMethod === 'midtrans'"
+            label="Bayar / Cek Status" 
+            icon="pi pi-external-link" 
+            severity="warn" 
+            class="w-full text-xs font-semibold" 
+            @click="isSuccessModalOpen = false; router.push({ name: 'payment-finish', query: { order_id: createdOrderNumber } })" 
+          />
+          <Button 
+            label="Kembali ke Katalog" 
+            severity="primary" 
+            outlined
+            class="w-full text-xs font-semibold" 
+            @click="isSuccessModalOpen = false" 
+          />
         </div>
       </template>
     </Dialog>

@@ -9,6 +9,7 @@ import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
 
+import { loadSnapScript, createSnapToken } from '@/services/paymentService'
 import { formatCurrencyIDR } from '@/utils/format'
 import { fetchOrders, fetchOrderById } from '@/services/orderService'
 import type { Order } from '@/types/order'
@@ -17,6 +18,7 @@ const route = useRoute()
 const router = useRouter()
 
 const isLoading = ref(true)
+const isPaying = ref(false)
 const orderData = ref<Order | null>(null)
 
 // Parse query or route params (e.g. from Midtrans redirect)
@@ -43,7 +45,7 @@ const paymentStatus = computed(() => {
   if (['settlement', 'capture', 'paid', 'success', 'completed'].includes(status) || code === '200') {
     return 'success'
   }
-  if (['pending', 'challenge'].includes(status) || code === '201') {
+  if (['pending', 'challenge', 'reserved', 'unpaid'].includes(status) || code === '201') {
     return 'pending'
   }
   if (['deny', 'cancel', 'expire', 'failure', 'failed'].includes(status) || ['202', '400', '407', '500'].includes(code)) {
@@ -54,11 +56,11 @@ const paymentStatus = computed(() => {
   if (orderData.value?.status) {
     const s = orderData.value.status.toLowerCase()
     if (['paid', 'completed', 'settlement'].includes(s)) return 'success'
-    if (['pending', 'unpaid'].includes(s)) return 'pending'
+    if (['pending', 'unpaid', 'reserved'].includes(s)) return 'pending'
     if (['cancelled', 'failed', 'expired'].includes(s)) return 'failed'
   }
 
-  return 'success' // optimistic default for 200 status code
+  return 'pending'
 })
 
 const statusConfig = computed(() => {
@@ -96,6 +98,52 @@ const statusConfig = computed(() => {
       }
   }
 })
+
+const handlePayWithMidtrans = async () => {
+  if (!orderData.value?.id) return
+  isPaying.value = true
+  try {
+    await loadSnapScript()
+    const snapRes = await createSnapToken(orderData.value.id)
+    if ((window as any).snap && snapRes.token) {
+      ;(window as any).snap.pay(snapRes.token, {
+        onSuccess: async () => {
+          if (orderData.value) {
+            orderData.value.status = 'paid'
+          }
+        },
+        onPending: () => {
+          if (orderData.value) orderData.value.status = 'pending'
+        },
+        onError: () => {
+          if (orderData.value) orderData.value.status = 'failed'
+        },
+        onClose: async () => {
+          if (orderData.value?.id) {
+            try {
+              const latest = await fetchOrderById(orderData.value.id)
+              orderData.value = latest
+            } catch {
+              // ignore
+            }
+          }
+        },
+      })
+    }
+  } catch (err: any) {
+    console.warn('Failed to create Snap token, checking latest order status from server:', err)
+    if (orderData.value?.id) {
+      try {
+        const latest = await fetchOrderById(orderData.value.id)
+        orderData.value = latest
+      } catch (checkErr) {
+        console.error('Failed to check latest order status:', checkErr)
+      }
+    }
+  } finally {
+    isPaying.value = false
+  }
+}
 
 onMounted(async () => {
   if (!orderIdQuery.value) {
@@ -209,6 +257,17 @@ const goToOrders = () => {
           <Message v-else-if="paymentStatus === 'failed'" severity="error" class="w-full mb-4 text-left" :closable="false">
             Jika saldo Anda terpotong atau terjadi kendala, silakan hubungi tim layanan pelanggan kami.
           </Message>
+
+          <!-- Midtrans Pay Button for Pending Orders -->
+          <Button
+            v-if="paymentStatus === 'pending' && orderData?.id && (orderData?.payment_method === 'midtrans' || !orderData?.payment_method)"
+            label="Bayar Sekarang via Midtrans"
+            icon="pi pi-credit-card"
+            severity="warn"
+            class="w-full mb-3 font-bold py-3"
+            :loading="isPaying"
+            @click="handlePayWithMidtrans"
+          />
 
           <!-- Action Buttons -->
           <div class="w-full flex flex-column sm:flex-row gap-3">

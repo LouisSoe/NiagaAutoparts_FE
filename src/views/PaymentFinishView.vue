@@ -19,9 +19,9 @@ const router = useRouter()
 const isLoading = ref(true)
 const orderData = ref<Order | null>(null)
 
-// Parse query params from Midtrans redirect
+// Parse query or route params (e.g. from Midtrans redirect)
 const orderIdQuery = computed(() => {
-  const q = route.query.order_id || route.query.orderId || route.query.id
+  const q = route.query.order_id || route.query.orderId || route.query.id || route.params.order_id || route.params.id
   return Array.isArray(q) ? q[0] : (q as string | undefined) || ''
 })
 
@@ -66,8 +66,8 @@ const statusConfig = computed(() => {
     case 'success':
       return {
         icon: 'pi pi-check-circle',
-        iconColor: 'text-green-500',
-        bgGradient: 'from-green-500/10 to-emerald-500/5',
+        iconColor: 'text-green-600',
+        bgColor: 'bg-green-100',
         badgeSeverity: 'success' as const,
         badgeText: 'Pembayaran Berhasil',
         title: 'Pembayaran Berhasil!',
@@ -76,8 +76,8 @@ const statusConfig = computed(() => {
     case 'pending':
       return {
         icon: 'pi pi-clock',
-        iconColor: 'text-amber-500',
-        bgGradient: 'from-amber-500/10 to-yellow-500/5',
+        iconColor: 'text-orange-600',
+        bgColor: 'bg-orange-100',
         badgeSeverity: 'warn' as const,
         badgeText: 'Menunggu Pembayaran',
         title: 'Pembayaran Menunggu Konfirmasi',
@@ -87,8 +87,8 @@ const statusConfig = computed(() => {
     default:
       return {
         icon: 'pi pi-times-circle',
-        iconColor: 'text-red-500',
-        bgGradient: 'from-red-500/10 to-rose-500/5',
+        iconColor: 'text-red-600',
+        bgColor: 'bg-red-100',
         badgeSeverity: 'danger' as const,
         badgeText: 'Pembayaran Gagal / Dibatalkan',
         title: 'Pembayaran Tidak Berhasil',
@@ -104,12 +104,10 @@ onMounted(async () => {
   }
 
   try {
-    // Try fetching by numerical ID first if orderIdQuery is numeric
     const numericId = parseInt(orderIdQuery.value, 10)
     if (!isNaN(numericId) && String(numericId) === orderIdQuery.value) {
       orderData.value = await fetchOrderById(numericId)
     } else {
-      // Otherwise search by order_number string
       const res = await fetchOrders({ q: orderIdQuery.value, limit: 1 })
       if (res.data && res.data.length > 0) {
         orderData.value = res.data[0]
@@ -132,100 +130,98 @@ const goToOrders = () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-surface-50 dark:bg-surface-950 flex items-center justify-center p-4">
-    <Card class="w-full max-w-lg shadow-xl border border-surface-200 dark:border-surface-800 overflow-hidden">
+  <div class="min-h-screen surface-ground flex align-items-center justify-content-center p-3 sm:p-5">
+    <Card class="payment-card shadow-4 border-round-2xl border-1 surface-border overflow-hidden">
       <template #content>
-        <div v-if="isLoading" class="flex flex-col items-center justify-center py-12 gap-4">
+        <div v-if="isLoading" class="flex flex-column align-items-center justify-content-center py-6 gap-3">
           <ProgressSpinner style="width: 50px; height: 50px" strokeWidth="4" />
-          <p class="text-surface-600 dark:text-surface-400 font-medium">Memuat status pembayaran...</p>
+          <p class="text-color-secondary font-medium m-0">Memuat status pembayaran...</p>
         </div>
 
-        <div v-else class="flex flex-col items-center text-center p-4">
+        <div v-else class="flex flex-column align-items-center text-center p-2 sm:p-4">
           <!-- Status Icon with Glow -->
           <div 
-            class="w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-inner transition-all duration-300"
-            :class="[
-              paymentStatus === 'success' ? 'bg-green-100 dark:bg-green-950/50' : 
-              paymentStatus === 'pending' ? 'bg-amber-100 dark:bg-amber-950/50' : 
-              'bg-red-100 dark:bg-red-950/50'
-            ]"
+            class="w-6rem h-6rem border-circle flex align-items-center justify-content-center mb-4 transition-all duration-300 shadow-2"
+            :class="[statusConfig.bgColor]"
           >
-            <i :class="[statusConfig.icon, statusConfig.iconColor, 'text-6xl']"></i>
+            <i :class="[statusConfig.icon, statusConfig.iconColor, 'text-5xl']"></i>
           </div>
 
           <!-- Title & Subtitle -->
-          <h1 class="text-2xl font-bold text-surface-900 dark:text-surface-0 mb-2">
+          <h1 class="text-2xl font-bold text-900 mb-2 mt-0">
             {{ statusConfig.title }}
           </h1>
-          <p class="text-surface-600 dark:text-surface-400 text-sm max-w-sm mb-6">
+          <p class="text-color-secondary text-sm line-height-3 mt-0 mb-4" style="max-width: 24rem">
             {{ statusConfig.subtitle }}
           </p>
 
-          <Tag :severity="statusConfig.badgeSeverity" class="px-4 py-1.5 text-xs font-semibold uppercase tracking-wider mb-6">
-            {{ statusConfig.badgeText }}
-          </Tag>
+          <Tag 
+            :severity="statusConfig.badgeSeverity" 
+            class="px-3 py-2 text-xs font-semibold tracking-wider mb-4 border-round-md uppercase"
+            :value="statusConfig.badgeText"
+          />
 
-          <Divider class="my-4" />
+          <Divider class="my-4 w-full" />
 
-          <!-- Order Summary Card -->
-          <div class="w-full bg-surface-100 dark:bg-surface-900 rounded-xl p-4 text-left space-y-3 mb-6 border border-surface-200/60 dark:border-surface-800/60">
-            <div class="flex justify-between items-center text-sm">
-              <span class="text-surface-500 dark:text-surface-400">ID / No. Pesanan</span>
-              <span class="font-mono font-semibold text-surface-900 dark:text-surface-0">
+          <!-- Order Summary Box -->
+          <div class="w-full surface-100 border-round-xl p-3 sm:p-4 text-left flex flex-column gap-3 mb-4 border-1 surface-border">
+            <div class="flex justify-content-between align-items-center text-sm">
+              <span class="text-color-secondary">ID / No. Pesanan</span>
+              <span class="font-mono font-bold text-900">
                 {{ orderIdQuery || orderData?.order_number || '-' }}
               </span>
             </div>
 
-            <div v-if="orderData?.total_price" class="flex justify-between items-center text-sm">
-              <span class="text-surface-500 dark:text-surface-400">Total Pembayaran</span>
-              <span class="font-semibold text-primary text-base">
+            <div v-if="orderData?.total_price" class="flex justify-content-between align-items-center text-sm">
+              <span class="text-color-secondary">Total Pembayaran</span>
+              <span class="font-bold text-primary text-base">
                 {{ formatCurrencyIDR(orderData.total_price) }}
               </span>
             </div>
 
-            <div v-if="transactionStatusQuery || orderData?.status" class="flex justify-between items-center text-sm">
-              <span class="text-surface-500 dark:text-surface-400">Status Transaksi</span>
-              <span class="capitalize font-medium text-surface-800 dark:text-surface-200">
+            <div v-if="transactionStatusQuery || orderData?.status" class="flex justify-content-between align-items-center text-sm">
+              <span class="text-color-secondary">Status Transaksi</span>
+              <span class="capitalize font-semibold text-700">
                 {{ transactionStatusQuery || orderData?.status }}
               </span>
             </div>
 
-            <div v-if="statusCodeQuery" class="flex justify-between items-center text-sm">
-              <span class="text-surface-500 dark:text-surface-400">Status Code</span>
-              <span class="font-mono text-xs text-surface-600 dark:text-surface-400">
+            <div v-if="statusCodeQuery" class="flex justify-content-between align-items-center text-sm">
+              <span class="text-color-secondary">Status Code</span>
+              <span class="font-mono text-xs text-600">
                 {{ statusCodeQuery }}
               </span>
             </div>
 
-            <div v-if="orderData?.payment_method" class="flex justify-between items-center text-sm">
-              <span class="text-surface-500 dark:text-surface-400">Metode Pembayaran</span>
-              <span class="font-medium text-surface-800 dark:text-surface-200 capitalize">
+            <div v-if="orderData?.payment_method" class="flex justify-content-between align-items-center text-sm">
+              <span class="text-color-secondary">Metode Pembayaran</span>
+              <span class="font-semibold text-700 capitalize">
                 {{ orderData.payment_method }}
               </span>
             </div>
           </div>
 
           <!-- Alert Note if Pending or Failed -->
-          <Message v-if="paymentStatus === 'pending'" severity="warn" class="w-full mb-6 text-left" :closable="false">
+          <Message v-if="paymentStatus === 'pending'" severity="warn" class="w-full mb-4 text-left" :closable="false">
             Jika Anda sudah menyelesaikan pembayaran, status akan diperbarui secara otomatis dalam beberapa saat.
           </Message>
 
-          <Message v-else-if="paymentStatus === 'failed'" severity="error" class="w-full mb-6 text-left" :closable="false">
+          <Message v-else-if="paymentStatus === 'failed'" severity="error" class="w-full mb-4 text-left" :closable="false">
             Jika saldo Anda terpotong atau terjadi kendala, silakan hubungi tim layanan pelanggan kami.
           </Message>
 
           <!-- Action Buttons -->
-          <div class="w-full flex flex-col sm:flex-row gap-3">
+          <div class="w-full flex flex-column sm:flex-row gap-3">
             <Button
               label="Kembali ke Beranda"
               icon="pi pi-home"
-              class="w-full sm:w-1/2 p-button-outlined"
+              class="p-button-outlined flex-1 w-full"
               @click="goToHome"
             />
             <Button
               label="Lihat Pesanan"
               icon="pi pi-shopping-bag"
-              class="w-full sm:w-1/2"
+              class="flex-1 w-full"
               @click="goToOrders"
             />
           </div>
@@ -239,4 +235,9 @@ const goToOrders = () => {
 .min-h-screen {
   min-height: 100vh;
 }
+.payment-card {
+  width: 100%;
+  max-width: 32rem;
+}
 </style>
+

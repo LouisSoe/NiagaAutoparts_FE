@@ -16,6 +16,7 @@ import Tag from 'primevue/tag';
 
 import { formatCurrencyIDR } from '@/utils/format';
 import type { Product } from '@/types/product';
+import { getSession } from '@/services/authService';
 import { fetchCategories } from '@/services/categoryService';
 import { fetchProducts } from '@/services/productService';
 import { createOrder } from '@/services/orderService';
@@ -254,8 +255,9 @@ const confirmPayment = async (): Promise<void> => {
   isSubmittingOrder.value = true;
 
   try {
+    const session = getSession();
     const payload: CreateOrderPayload = {
-      user_id: 1, // Default user POS
+      user_id: session?.id || null, // ID Admin atau Kasir yang sedang login
       amount_paid: paymentAmount.value!,
       change_amount: kembalian.value,
       source: 'pos',

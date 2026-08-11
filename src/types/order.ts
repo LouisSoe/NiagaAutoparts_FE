@@ -60,6 +60,10 @@ export interface CreateOrderItemPayload {
 
 export interface CreateOrderPayload {
   user_id?: number | null
+  customer_name?: string
+  customer_phone?: string
+  customer_email?: string
+  address?: string
   amount_paid: number
   change_amount: number
   source?: string

@@ -91,6 +91,7 @@ export interface FetchOrdersParams {
   status?: string
   page?: number
   limit?: number
+  user_id?: number
 }
 
 export interface FetchOrdersResult {
@@ -109,6 +110,7 @@ export async function fetchOrders(
   const queryParams = new URLSearchParams()
   if (params?.q) queryParams.append('q', params.q)
   if (params?.status) queryParams.append('status', params.status)
+  if (params?.user_id) queryParams.append('user_id', String(params.user_id))
   if (params?.page) queryParams.append('page', String(params.page))
   if (params?.limit) queryParams.append('limit', String(params.limit))
 

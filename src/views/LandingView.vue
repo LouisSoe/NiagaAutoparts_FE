@@ -24,10 +24,11 @@ import { formatCurrencyIDR } from '@/utils/format'
 import { getSession, clearSession, updateUserProfile } from '@/services/authService'
 import { fetchCategories } from '@/services/categoryService'
 import { fetchProducts } from '@/services/productService'
-import { createOrder } from '@/services/orderService'
+import { createOrder, fetchOrders } from '@/services/orderService'
 import { createSnapToken, loadSnapScript } from '@/services/paymentService'
 import type { Category } from '@/types/category'
 import type { Product } from '@/types/product'
+import type { CreateOrderPayload } from '@/types/order'
 
 interface CategoryOption {
   id: number | 'all'
@@ -348,6 +349,129 @@ const handleSaveProfile = (): void => {
   isProfileModalOpen.value = false
 }
 
+/* =========================================================
+ * CUSTOMER ORDERS MODAL STATE & LOGIC
+ * ======================================================= */
+const isCustomerOrdersOpen = ref(false)
+const isLoadingCustomerOrders = ref(false)
+const customerOrders = ref<Order[]>([])
+const orderSearchQuery = ref('')
+const selectedOrderSourceFilter = ref<'all' | 'web' | 'telegram' | 'pos'>('all')
+const searchValidationWarning = ref('')
+
+const filteredCustomerOrders = computed(() => {
+  if (selectedOrderSourceFilter.value === 'all') {
+    return customerOrders.value
+  }
+  return customerOrders.value.filter((o) => o.source === selectedOrderSourceFilter.value)
+})
+
+const isExactOrderNumber = (str: string): boolean => {
+  return /^APT-\d{8}-[A-Z0-9]{4}$/i.test(str)
+}
+
+const isValidPhoneNumber = (str: string): boolean => {
+  const cleanDigits = str.replace(/\D/g, '')
+  return cleanDigits.length >= 11
+}
+
+const fetchCustomerOrders = async (): Promise<void> => {
+  searchValidationWarning.value = ''
+  const session = getSession()
+  const query = orderSearchQuery.value.trim()
+  const isLoggedInUser = !!(session && !session.isGuest && session.id)
+
+  // Validation for Guest Accounts
+  if (!isLoggedInUser) {
+    if (!query) {
+      searchValidationWarning.value = 'Silakan masukkan Kode Pesanan atau Nomor HP.'
+      toast.add({
+        severity: 'warn',
+        summary: 'Pencarian Kosong',
+        detail: searchValidationWarning.value,
+        life: 4000,
+      })
+      return
+    }
+
+    const validOrder = isExactOrderNumber(query)
+    const validPhone = isValidPhoneNumber(query)
+
+    if (!validOrder && !validPhone) {
+      searchValidationWarning.value = 'Format tidak sesuai. Gunakan Kode Pesanan lengkap (cth: APT-20260811-FE0M) atau No. HP minimal 11 digit.'
+      toast.add({
+        severity: 'warn',
+        summary: 'Format Pencarian Tidak Valid',
+        detail: searchValidationWarning.value,
+        life: 5000,
+      })
+      return
+    }
+  }
+
+  isLoadingCustomerOrders.value = true
+  try {
+    const params: Record<string, any> = { limit: 50 }
+    if (query) {
+      params.q = query
+    }
+    if (isLoggedInUser) {
+      params.user_id = session.id
+    }
+
+    console.log('[LandingView] Fetching orders with params:', params)
+    const res = await fetchOrders(params)
+    customerOrders.value = res.data
+
+    if (!res.data || res.data.length === 0) {
+      toast.add({
+        severity: 'info',
+        summary: 'Pesanan Tidak Ditemukan',
+        detail: query ? `Tidak ada pesanan yang cocok dengan "${query}".` : 'Belum ada pesanan.',
+        life: 3000,
+      })
+    }
+  } catch (err: any) {
+    console.error('[LandingView] Error fetching customer orders:', err)
+    toast.add({
+      severity: 'error',
+      summary: 'Gagal Memuat Pesanan',
+      detail: err.message || 'Tidak dapat mengambil daftar pesanan.',
+      life: 3000,
+    })
+  } finally {
+    isLoadingCustomerOrders.value = false
+  }
+}
+
+const openCustomerOrdersModal = (): void => {
+  if (profilePopover.value) {
+    profilePopover.value.hide()
+  }
+  isCustomerOrdersOpen.value = true
+}
+
+const getOrderStatusSeverity = (status: string) => {
+  const s = status.toLowerCase()
+  if (['paid', 'settlement', 'completed', 'success'].includes(s)) return 'success'
+  if (['pending', 'reserved', 'unpaid'].includes(s)) return 'warn'
+  if (['cancelled', 'failed', 'expired'].includes(s)) return 'danger'
+  return 'secondary'
+}
+
+const getOrderStatusLabel = (status: string) => {
+  const s = status.toLowerCase()
+  if (['paid', 'settlement', 'completed', 'success'].includes(s)) return 'Lunas'
+  if (['pending', 'reserved', 'unpaid'].includes(s)) return 'Menunggu Pembayaran'
+  if (['cancelled', 'failed', 'expired'].includes(s)) return 'Dibatalkan / Kadaluarsa'
+  return status
+}
+
+const viewOrderDetails = (orderNumber: string) => {
+  isCustomerOrdersOpen.value = false
+  router.push({ name: 'payment-finish', query: { order_id: orderNumber } })
+}
+
 const openCheckoutModal = (): void => {
   const session = getSession()
   if (session && !session.isGuest) {
@@ -387,8 +511,12 @@ const handleProcessCheckout = async (): Promise<void> => {
 
   try {
     const session = getSession()
-    const payload = {
+    const payload: CreateOrderPayload = {
       user_id: session?.id ?? null,
+      customer_name: customerForm.value.name,
+      customer_phone: customerForm.value.phone,
+      customer_email: customerForm.value.email,
+      address: customerForm.value.address,
       amount_paid: 0,
       change_amount: 0,
       source: 'web',
@@ -523,6 +651,17 @@ onMounted(async () => {
             />
           </IconField>
 
+          <!-- Customer Orders Button -->
+          <Button
+            icon="pi pi-receipt"
+            label="Pesanan Saya"
+            rounded
+            text
+            severity="secondary"
+            class="hidden sm:inline-flex text-xs font-semibold"
+            @click="openCustomerOrdersModal"
+          />
+
           <!-- Cart Icon Button with Badge -->
           <div class="relative flex align-items-center">
             <Button
@@ -565,6 +704,15 @@ onMounted(async () => {
                     </div>
                   </div>
                   <Button
+                    label="Pesanan Saya"
+                    icon="pi pi-receipt"
+                    severity="secondary"
+                    outlined
+                    size="small"
+                    class="w-full"
+                    @click="openCustomerOrdersModal"
+                  />
+                  <Button
                     label="Profil Saya"
                     icon="pi pi-user-edit"
                     severity="secondary"
@@ -585,6 +733,15 @@ onMounted(async () => {
                 </template>
                 <template v-else>
                   <div class="text-sm text-600 mb-1">Anda belum login.</div>
+                  <Button
+                    label="Cek Pesanan"
+                    icon="pi pi-receipt"
+                    severity="secondary"
+                    outlined
+                    size="small"
+                    class="w-full mb-1"
+                    @click="openCustomerOrdersModal"
+                  />
                   <Button
                     label="Login"
                     icon="pi pi-sign-in"
@@ -713,7 +870,7 @@ onMounted(async () => {
           >
             <Card
               class="shadow-none border-1 surface-border border-round-xl overflow-hidden relative flex flex-column h-full transition-all duration-200 hover:shadow-2"
-              :class="{ 'opacity-70': isLowStock(product) || isOutOfStock(product) }"
+              :class="{ 'opacity-70': isOutOfStock(product) }"
             >
               <template #header>
                 <div class="relative surface-100 overflow-hidden" style="height: 8.5rem">
@@ -731,15 +888,23 @@ onMounted(async () => {
                     <i class="pi pi-image text-4xl text-400" />
                   </div>
 
-                  <!-- Overlay for Low Stock / Out of Stock -->
+                  <!-- Overlay for Out of Stock -->
                   <div
-                    v-if="isLowStock(product) || isOutOfStock(product)"
+                    v-if="isOutOfStock(product)"
                     class="absolute inset-0 bg-white-alpha-40 pointer-events-none z-1"
                   />
 
-                  <!-- Tag Badge: Only shown when LOW STOCK -->
+                  <!-- Tag Badge: Out of Stock -->
                   <Tag
-                    v-if="isLowStock(product)"
+                    v-if="isOutOfStock(product)"
+                    value="STOK HABIS"
+                    severity="danger"
+                    class="absolute top-0 right-0 m-2 text-xs font-bold uppercase tracking-wider z-2"
+                    style="font-size: 0.65rem; line-height: 1;"
+                  />
+                  <!-- Tag Badge: Low Stock -->
+                  <Tag
+                    v-else-if="isLowStock(product)"
                     value="LOW STOCK"
                     severity="warn"
                     class="absolute top-0 right-0 m-2 text-xs font-bold uppercase tracking-wider z-2"
@@ -1118,6 +1283,157 @@ onMounted(async () => {
         <div class="flex justify-content-end gap-2 w-full pt-2">
           <Button label="Batal" severity="secondary" outlined size="small" @click="isProfileModalOpen = false" />
           <Button label="Simpan Profil" icon="pi pi-check" severity="primary" size="small" @click="handleSaveProfile" />
+        </div>
+      </template>
+    </Dialog>
+
+    <!-- ==========================================
+         7.6. MODAL DAFTAR PESANAN CUSTOMER
+    =========================================== -->
+    <Dialog
+      v-model:visible="isCustomerOrdersOpen"
+      modal
+      header="Daftar Pesanan Saya"
+      dismissableMask
+      style="width: 90vw; max-width: 44rem;"
+      class="border-round-2xl"
+    >
+      <div class="flex flex-column gap-3 pt-1">
+        <!-- Search Box & Button -->
+        <form @submit.prevent="fetchCustomerOrders" class="flex gap-2 w-full">
+          <IconField class="flex-1 min-w-0">
+            <InputIcon class="pi pi-search text-400" />
+            <InputText
+              v-model="orderSearchQuery"
+              placeholder="Kode Pesanan (APT-...) atau No. HP (11+ digit)..."
+              class="w-full text-sm border-round-lg"
+            />
+          </IconField>
+          <Button
+            type="submit"
+            label="Cari"
+            icon="pi pi-search"
+            size="small"
+            severity="primary"
+            :disabled="!orderSearchQuery.trim()"
+            :loading="isLoadingCustomerOrders"
+          />
+        </form>
+
+        <!-- Search Validation Warning -->
+        <Message
+          v-if="searchValidationWarning"
+          severity="warn"
+          class="w-full text-xs m-0"
+          :closable="true"
+          @close="searchValidationWarning = ''"
+        >
+          {{ searchValidationWarning }}
+        </Message>
+
+        <!-- Filter Source Chips -->
+        <div class="flex gap-1.5 align-items-center text-xs overflow-x-auto pb-1">
+          <span class="text-500 font-medium mr-1">Sumber:</span>
+          <Button
+            label="Semua"
+            :severity="selectedOrderSourceFilter === 'all' ? 'primary' : 'secondary'"
+            :outlined="selectedOrderSourceFilter !== 'all'"
+            size="small"
+            class="text-xs px-2.5 py-1"
+            @click="selectedOrderSourceFilter = 'all'"
+          />
+          <Button
+            label="Website"
+            icon="pi pi-globe"
+            :severity="selectedOrderSourceFilter === 'web' ? 'primary' : 'secondary'"
+            :outlined="selectedOrderSourceFilter !== 'web'"
+            size="small"
+            class="text-xs px-2.5 py-1"
+            @click="selectedOrderSourceFilter = 'web'"
+          />
+          <Button
+            label="Telegram Bot"
+            icon="pi pi-send"
+            :severity="selectedOrderSourceFilter === 'telegram' ? 'primary' : 'secondary'"
+            :outlined="selectedOrderSourceFilter !== 'telegram'"
+            size="small"
+            class="text-xs px-2.5 py-1"
+            @click="selectedOrderSourceFilter = 'telegram'"
+          />
+          <Button
+            label="Kasir POS"
+            icon="pi pi-shopping-cart"
+            :severity="selectedOrderSourceFilter === 'pos' ? 'primary' : 'secondary'"
+            :outlined="selectedOrderSourceFilter !== 'pos'"
+            size="small"
+            class="text-xs px-2.5 py-1"
+            @click="selectedOrderSourceFilter = 'pos'"
+          />
+        </div>
+
+        <!-- Loading State -->
+        <div v-if="isLoadingCustomerOrders" class="flex justify-content-center align-items-center py-6">
+          <ProgressSpinner style="width: 2.5rem; height: 2.5rem" stroke-width="4" />
+        </div>
+
+        <!-- Orders List -->
+        <div v-else-if="filteredCustomerOrders.length" class="flex flex-column gap-3 overflow-y-auto pr-1" style="max-height: 28rem;">
+          <div
+            v-for="ord in filteredCustomerOrders"
+            :key="ord.id"
+            class="surface-card border-1 surface-border border-round-xl p-3 flex flex-column gap-2 hover:shadow-1 transition-all"
+          >
+            <div class="flex justify-content-between align-items-center">
+              <span class="font-mono font-bold text-900 text-sm">{{ ord.order_number }}</span>
+              <Tag
+                :severity="getOrderStatusSeverity(ord.status)"
+                :value="getOrderStatusLabel(ord.status)"
+                class="text-xs px-2 py-1 uppercase"
+              />
+            </div>
+
+            <div class="flex justify-content-between align-items-center text-xs text-color-secondary">
+              <span>Tanggal: {{ new Date(ord.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</span>
+              <span class="capitalize">Metode: {{ ord.payment_method || '-' }}</span>
+            </div>
+
+            <!-- Items Breakdown -->
+            <div v-if="ord.items && ord.items.length" class="surface-100 border-round-lg p-2.5 text-xs flex flex-column gap-1.5">
+              <div v-for="item in ord.items" :key="item.id" class="flex justify-content-between align-items-center">
+                <span class="text-700 font-medium truncate max-w-16rem">{{ item.product_name || `Produk #${item.product_id}` }} ×{{ item.quantity }}</span>
+                <span class="font-semibold text-800">{{ formatCurrencyIDR(item.subtotal) }}</span>
+              </div>
+            </div>
+
+            <div class="flex justify-content-between align-items-center pt-2 border-top-1 surface-border">
+              <div>
+                <span class="text-xs text-color-secondary block">Total Harga</span>
+                <span class="font-bold text-blue-700 text-base">{{ formatCurrencyIDR(ord.total_price) }}</span>
+              </div>
+              <Button
+                label="Detail Status"
+                icon="pi pi-external-link"
+                iconPos="right"
+                size="small"
+                severity="primary"
+                outlined
+                @click="viewOrderDetails(ord.order_number)"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty State -->
+        <div v-else class="flex flex-column align-items-center justify-content-center py-6 text-color-secondary gap-2">
+          <i class="pi pi-inbox text-4xl text-400" />
+          <p class="m-0 text-sm font-medium">Belum ada pesanan ditemukan.</p>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="flex justify-content-between align-items-center w-full pt-2">
+          <span class="text-xs text-color-secondary">* Otomatis terhubung dengan token sesi akun Anda</span>
+          <Button label="Tutup" severity="secondary" outlined size="small" @click="isCustomerOrdersOpen = false" />
         </div>
       </template>
     </Dialog>

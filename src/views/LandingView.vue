@@ -446,11 +446,16 @@ const fetchCustomerOrders = async (): Promise<void> => {
   }
 }
 
-const openCustomerOrdersModal = (): void => {
+const openCustomerOrdersModal = async (): Promise<void> => {
   if (profilePopover.value) {
     profilePopover.value.hide()
   }
   isCustomerOrdersOpen.value = true
+
+  const session = getSession()
+  if (session && !session.isGuest && session.id) {
+    await fetchCustomerOrders()
+  }
 }
 
 const getOrderStatusSeverity = (status: string) => {
@@ -703,6 +708,12 @@ const reopenMidtransPayment = async (): Promise<void> => {
           })
         } else {
           createdOrderStatus.value = latestOrder.status
+          toast.add({
+            severity: 'info',
+            summary: 'Transaksi Midtrans Sudah Dibuat',
+            detail: 'Kode pesanan ini sudah pernah dikirim ke Midtrans. Silakan selesaikan pembayaran di aplikasi bank/e-wallet Anda.',
+            life: 5000,
+          })
         }
         isSuccessModalOpen.value = true
         return

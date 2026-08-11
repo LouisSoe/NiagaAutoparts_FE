@@ -140,6 +140,23 @@ const handlePayWithMidtrans = async () => {
         console.error('Failed to check latest order status:', checkErr)
       }
     }
+
+    const errMsg = err?.message || ''
+    if (errMsg.includes('sudah digunakan') || errMsg.includes('already used') || errMsg.includes('duplicate')) {
+      toast.add({
+        severity: 'info',
+        summary: 'Transaksi Midtrans Sudah Dibuat',
+        detail: 'Kode pesanan ini sudah pernah dikirim ke Midtrans. Silakan selesaikan pembayaran di aplikasi bank/e-wallet Anda.',
+        life: 5000,
+      })
+    } else {
+      toast.add({
+        severity: 'error',
+        summary: 'Gagal Membuka Pembayaran',
+        detail: errMsg || 'Terjadi kesalahan saat menghubungkan ke Midtrans.',
+        life: 4000,
+      })
+    }
   } finally {
     isPaying.value = false
   }

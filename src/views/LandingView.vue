@@ -523,12 +523,14 @@ const handleProcessCheckout = async (): Promise<void> => {
 
   try {
     const session = getSession()
+    const isLoggedInUser = Boolean(session && !session.isGuest && session.id)
+    console.log(isLoggedInUser);
     const payload: CreateOrderPayload = {
-      user_id: session?.id ?? null,
+      ...(isLoggedInUser ? { user_id: session!.id } : {}),
       customer_name: customerForm.value.name,
       customer_phone: customerForm.value.phone,
-      customer_email: customerForm.value.email,
-      address: customerForm.value.address,
+      customer_email: customerForm.value.email || undefined,
+      address: customerForm.value.address || undefined,
       amount_paid: 0,
       change_amount: 0,
       source: 'web',

@@ -32,20 +32,36 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const url = `${BASE_URL}${path}`
 
-  const sessionData = localStorage.getItem('autoparts_user_session')
-  let token = ''
-  if (sessionData) {
-    try {
-      const parsed = JSON.parse(sessionData)
-      token = parsed.token || ''
-    } catch {
-      // ignore
+  // Ambil token dari localStorage / sessionStorage jika user terautentikasi
+  let token =
+    localStorage.getItem('autoparts_token') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('access_token') ||
+    sessionStorage.getItem('autoparts_token') ||
+    sessionStorage.getItem('token') ||
+    ''
+
+  if (!token) {
+    const sessionData =
+      localStorage.getItem('autoparts_user_session') ||
+      sessionStorage.getItem('autoparts_user_session')
+    if (sessionData) {
+      try {
+        const parsed = JSON.parse(sessionData)
+        token = parsed.token || parsed.access_token || ''
+      } catch {
+        // ignore
+      }
     }
   }
 
+  const authHeader = token
+    ? { Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}` }
+    : {}
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...authHeader,
     ...((options.headers as Record<string, string>) ?? {}),
   }
 

@@ -653,8 +653,11 @@ const viewOrderDetails = (orderNumber: string) => {
   router.push({ name: 'payment-finish', query: { order_id: orderNumber } })
 }
 
+const currentCustomerId = ref<number | null>(null)
+
 const openCheckoutModal = async (): Promise<void> => {
   const session = getSession()
+  currentCustomerId.value = null
   if (session && !session.isGuest) {
     isUserLoggedIn.value = true
     // Isi awal dari session
@@ -667,6 +670,7 @@ const openCheckoutModal = async (): Promise<void> => {
     if (session.id) {
       const customerData = await fetchCustomerByUserId(session.id)
       if (customerData) {
+        if (customerData.id) currentCustomerId.value = customerData.id
         if (customerData.name) customerForm.value.name = customerData.name
         if (customerData.phone) customerForm.value.phone = customerData.phone
         if (customerData.address) customerForm.value.address = customerData.address
@@ -750,6 +754,7 @@ const handleProcessCheckout = async (): Promise<void> => {
 
     const payload: CreateOrderPayload = {
       ...(isLoggedInUser ? { user_id: session!.id } : {}),
+      ...(currentCustomerId.value ? { customer_id: currentCustomerId.value } : {}),
       customer_name: customerForm.value.name,
       customer_phone: customerForm.value.phone,
       customer_email: customerForm.value.email || undefined,

@@ -39,6 +39,7 @@ export interface Order {
   id: number
   order_number: string
   user_id?: number | null
+  customer_id?: number | null
   total_price: number
   amount_paid: number
   change_amount: number
@@ -63,6 +64,7 @@ export interface CreateOrderItemPayload {
 
 export interface CreateOrderPayload {
   user_id?: number | null
+  customer_id?: number | null
   customer_name?: string
   customer_phone?: string
   customer_email?: string

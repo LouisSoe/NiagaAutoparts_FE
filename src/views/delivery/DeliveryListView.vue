@@ -178,7 +178,10 @@ const stats = computed(() => {
 const loadDeliveries = async () => {
   isLoading.value = true
   try {
-    const data = await deliveryService.getDeliveriesByDate(formattedSelectedDate.value)
+    const data = await deliveryService.getDeliveriesByDate(
+      formattedSelectedDate.value,
+      filterStatus.value || undefined
+    )
     deliveries.value = data
   } catch (err: any) {
     console.error('[DeliveryListView] Failed to load deliveries:', err)
@@ -194,7 +197,7 @@ const loadDeliveries = async () => {
   }
 }
 
-watch(selectedDate, () => {
+watch([selectedDate, filterStatus], () => {
   loadDeliveries()
 })
 

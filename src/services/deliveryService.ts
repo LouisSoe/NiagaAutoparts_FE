@@ -47,12 +47,20 @@ export const deliveryService = {
   },
 
   /**
-   * Mengambil daftar deliveries berdasarkan tanggal (GET /api/v1/deliveries?date=YYYY-MM-DD)
+   * Mengambil daftar deliveries berdasarkan tanggal dan status opsional (GET /api/v1/deliveries?date=YYYY-MM-DD&status=...)
    */
-  async getDeliveriesByDate(date: string): Promise<DeliveryDetails[]> {
-    const res = await apiFetch<ApiResponse<DeliveryDetails[]>>(
-      `/api/v1/deliveries?date=${encodeURIComponent(date)}`
-    )
+  async getDeliveriesByDate(date?: string, status?: string): Promise<DeliveryDetails[]> {
+    const searchParams = new URLSearchParams()
+    if (date) {
+      searchParams.append('date', date)
+    }
+    if (status) {
+      searchParams.append('status', status)
+    }
+
+    const queryStr = searchParams.toString()
+    const endpoint = `/api/v1/deliveries${queryStr ? `?${queryStr}` : ''}`
+    const res = await apiFetch<ApiResponse<DeliveryDetails[]>>(endpoint)
     return res.data ?? []
   },
 

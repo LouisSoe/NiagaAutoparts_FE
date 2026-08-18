@@ -36,6 +36,35 @@ interface CustomerSingleResponse {
   data: CustomerApiItem
 }
 
+export interface CustomerProfileData {
+  id: number
+  user_id: number
+  name: string
+  phone: string
+  email?: string
+  address: string
+  notes?: string
+  latitude?: number
+  longitude?: number
+  type_customer?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface UpdateCustomerProfilePayload {
+  name: string
+  phone: string
+  address: string
+  latitude?: number
+  longitude?: number
+  notes?: string
+  type_customer?: string
+}
+
+interface CustomerByUserResponse {
+  data: CustomerProfileData
+}
+
 /* ================================================================
  * Mapper: backend → frontend
  * ============================================================== */
@@ -103,6 +132,29 @@ export async function fetchCustomers(
 export async function fetchCustomerById(id: number): Promise<Customer> {
   const res = await apiFetch<CustomerSingleResponse>(`/api/v1/customers/${id}`)
   return mapCustomer(res.data)
+}
+
+/** GET /api/v1/customers/user/:userId */
+export async function fetchCustomerByUserId(userId: number): Promise<CustomerProfileData | null> {
+  try {
+    const res = await apiFetch<CustomerByUserResponse>(`/api/v1/customers/user/${userId}`)
+    return res.data ?? null
+  } catch (err) {
+    console.warn(`[customerService] Failed to fetch customer data for user_id ${userId}:`, err)
+    return null
+  }
+}
+
+/** PUT /api/v1/customers/user/:userId */
+export async function updateCustomerByUserId(
+  userId: number,
+  payload: UpdateCustomerProfilePayload
+): Promise<CustomerProfileData> {
+  const res = await apiFetch<CustomerByUserResponse>(`/api/v1/customers/user/${userId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+  return res.data
 }
 
 export interface CreateCustomerPayload {

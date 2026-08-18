@@ -268,6 +268,9 @@ const confirmPayment = async (): Promise<void> => {
       source: 'pos',
       payment_method: 'cash',
       notes: 'Pembelian via Kasir POS',
+      order_type: 'pickup',
+      tax_amount: tax.value,
+      shipping_cost: 0,
       items: cart.value.map((item) => ({
         product_id: item.productId,
         quantity: item.quantity,

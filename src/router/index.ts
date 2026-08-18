@@ -71,9 +71,19 @@ const router = createRouter({
                     component: () => import('@/views/master/UserView.vue'),
                 },
                 {
+                    path: '/master/delivery-schedules',
+                    name: 'master-delivery-schedules',
+                    component: () => import('@/views/master/DeliveryScheduleView.vue'),
+                },
+                {
                     path: '/orders',
                     name: 'orders',
                     component: () => import('@/views/OrderView.vue'),
+                },
+                {
+                    path: '/deliveries',
+                    name: 'deliveries',
+                    component: () => import('@/views/delivery/DeliveryListView.vue'),
                 },
 
                 {

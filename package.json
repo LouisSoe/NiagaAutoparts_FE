@@ -16,7 +16,9 @@
   },
   "dependencies": {
     "@primeuix/themes": "^3.0.0",
+    "@vue-leaflet/vue-leaflet": "^0.10.1",
     "chart.js": "^4.5.1",
+    "leaflet": "^1.9.4",
     "pinia": "^4.0.2",
     "primeflex": "^4.0.0",
     "primeicons": "^8.0.0",

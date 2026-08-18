@@ -92,6 +92,11 @@ const menuGroups = computed<MenuGroup[]>(() => {
                     icon: 'pi pi-user',
                     route: '/master/users',
                 },
+                {
+                    label: 'Jadwal Delivery',
+                    icon: 'pi pi-calendar-clock',
+                    route: '/master/delivery-schedules',
+                },
             ],
         },
         {
@@ -101,6 +106,11 @@ const menuGroups = computed<MenuGroup[]>(() => {
                     label: 'Order',
                     icon: 'pi pi-shopping-cart',
                     route: '/orders',
+                },
+                {
+                    label: 'Pengantaran (Delivery)',
+                    icon: 'pi pi-truck',
+                    route: '/deliveries',
                 },
             ],
         },

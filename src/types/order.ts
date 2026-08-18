@@ -46,6 +46,9 @@ export interface Order {
   source: string
   payment_method: string
   notes?: string | null
+  order_type?: string | null
+  tax_amount?: number | null
+  shipping_cost?: number | null
   expires_at?: string | null
   created_at: string
   updated_at: string
@@ -70,6 +73,9 @@ export interface CreateOrderPayload {
   payment_method?: string
   status?: string
   notes?: string
+  order_type?: 'delivery' | 'pickup' | string
+  tax_amount?: number
+  shipping_cost?: number
   items: CreateOrderItemPayload[]
 }
 

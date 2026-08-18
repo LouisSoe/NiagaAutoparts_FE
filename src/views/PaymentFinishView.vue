@@ -12,7 +12,10 @@ import ProgressSpinner from 'primevue/progressspinner'
 import { loadSnapScript, createSnapToken } from '@/services/paymentService'
 import { formatCurrencyIDR } from '@/utils/format'
 import { fetchOrders, fetchOrderById } from '@/services/orderService'
+import { deliveryService } from '@/services/deliveryService'
+import RescheduleNotificationModal from '@/components/RescheduleNotificationModal.vue'
 import type { Order } from '@/types/order'
+import type { DeliveryDetails } from '@/types/delivery'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,6 +23,8 @@ const router = useRouter()
 const isLoading = ref(true)
 const isPaying = ref(false)
 const orderData = ref<Order | null>(null)
+const deliveryData = ref<DeliveryDetails | null>(null)
+const isRescheduleModalOpen = ref(false)
 
 // Parse query or route params (e.g. from Midtrans redirect)
 const orderIdQuery = computed(() => {
@@ -178,6 +183,14 @@ onMounted(async () => {
         orderData.value = res.data[0]
       }
     }
+
+    if (orderData.value?.id) {
+      try {
+        deliveryData.value = await deliveryService.getDeliveryByOrderId(orderData.value.id)
+      } catch (e) {
+        console.warn('No delivery record found or failed to fetch delivery:', e)
+      }
+    }
   } catch (err) {
     console.warn('Could not fetch order details:', err)
   } finally {
@@ -266,6 +279,53 @@ const goToOrders = () => {
             </div>
           </div>
 
+          <!-- Delivery Status Card if Delivery exists -->
+          <div
+            v-if="deliveryData"
+            class="w-full surface-50 border-round-xl p-3 sm:p-4 text-left flex flex-column gap-3 mb-4 border-1 surface-border"
+          >
+            <div class="flex align-items-center justify-content-between">
+              <div class="flex align-items-center gap-2">
+                <i class="pi pi-truck text-blue-600 text-lg" />
+                <span class="font-bold text-sm text-900">Status Pengantaran Kurir</span>
+              </div>
+              <Tag
+                :value="deliveryData.status.replace(/_/g, ' ').toUpperCase()"
+                :severity="
+                  deliveryData.status === 'confirmed' || deliveryData.status === 'delivered'
+                    ? 'success'
+                    : deliveryData.status === 'reschedule_suggested'
+                    ? 'warn'
+                    : 'info'
+                "
+                class="text-xs"
+              />
+            </div>
+
+            <div class="text-xs text-600 flex flex-column gap-1">
+              <div><strong>Tanggal Antar:</strong> {{ deliveryData.delivery_date }}</div>
+              <div><strong>Alamat Tujuan:</strong> {{ deliveryData.address }}</div>
+              <div v-if="deliveryData.distance_km"><strong>Jarak:</strong> {{ deliveryData.distance_km }} km (Ongkir: {{ formatCurrencyIDR(deliveryData.shipping_cost) }})</div>
+            </div>
+
+            <!-- Warning and button if Reschedule is suggested -->
+            <div
+              v-if="deliveryData.status === 'reschedule_suggested'"
+              class="p-2 bg-orange-50 border-round-lg border-1 border-orange-200 flex align-items-center justify-content-between gap-2"
+            >
+              <span class="text-xs text-orange-900">
+                ⚠️ Kurir menyarankan jadwal baru: <strong>{{ deliveryData.suggested_date }}</strong>
+              </span>
+              <Button
+                label="Lihat Saran"
+                size="small"
+                severity="warn"
+                class="text-xs py-1 px-2"
+                @click="isRescheduleModalOpen = true"
+              />
+            </div>
+          </div>
+
           <!-- Alert Note if Pending or Failed -->
           <Message v-if="paymentStatus === 'pending'" severity="warn" class="w-full mb-4 text-left" :closable="false">
             Jika Anda sudah menyelesaikan pembayaran, status akan diperbarui secara otomatis dalam beberapa saat.
@@ -304,6 +364,15 @@ const goToOrders = () => {
         </div>
       </template>
     </Card>
+
+    <!-- Reschedule Modal -->
+    <RescheduleNotificationModal
+      v-model:visible="isRescheduleModalOpen"
+      :delivery="deliveryData"
+      @accepted="(updated) => {
+        deliveryData = updated
+      }"
+    />
   </div>
 </template>
 

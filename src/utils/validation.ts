@@ -111,6 +111,31 @@ export const productSchema = z.object({
     .nullable(),
 })
 
+/**
+ * Delivery Schedule Form Validation Schema
+ */
+export const deliveryScheduleSchema = z.object({
+  day_of_week: z
+    .string()
+    .min(1, 'Hari wajib dipilih'),
+  slot_name: z
+    .string()
+    .min(1, 'Nama slot wajib diisi')
+    .max(50, 'Nama slot maksimal 50 karakter'),
+  start_time: z
+    .string()
+    .min(1, 'Waktu mulai wajib diisi')
+    .regex(/^([01]\d|2[0-3]):([0-5]\d)(:([0-5]\d))?$/, 'Format waktu mulai tidak valid (contoh: 09:00)'),
+  end_time: z
+    .string()
+    .min(1, 'Waktu selesai wajib diisi')
+    .regex(/^([01]\d|2[0-3]):([0-5]\d)(:([0-5]\d))?$/, 'Format waktu selesai tidak valid (contoh: 12:00)'),
+  max_capacity: z
+    .number({ message: 'Kapasitas maksimal harus berupa angka' })
+    .min(1, 'Kapasitas minimal 1'),
+  is_active: z.boolean().optional(),
+})
+
 /* =========================================================
  * HELPER FUNCTION
  * ======================================================= */

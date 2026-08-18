@@ -16,6 +16,7 @@ import Menu from 'primevue/menu'
 import Popover from 'primevue/popover'
 import ProgressSpinner from 'primevue/progressspinner'
 import RadioButton from 'primevue/radiobutton'
+import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
 import { useToast } from 'primevue/usetoast'
@@ -24,11 +25,17 @@ import { formatCurrencyIDR } from '@/utils/format'
 import { getSession, clearSession, updateUserProfile } from '@/services/authService'
 import { fetchCategories } from '@/services/categoryService'
 import { fetchProducts } from '@/services/productService'
+import { fetchCustomerByUserId, updateCustomerByUserId } from '@/services/customerService'
 import { createOrder, fetchOrders } from '@/services/orderService'
 import { createSnapToken, loadSnapScript } from '@/services/paymentService'
+import { deliveryService } from '@/services/deliveryService'
+import DeliveryScheduleSelector from '@/components/DeliveryScheduleSelector.vue'
+import LocationMapPicker from '@/components/LocationMapPicker.vue'
+import RescheduleNotificationModal from '@/components/RescheduleNotificationModal.vue'
 import type { Category } from '@/types/category'
 import type { Product } from '@/types/product'
 import type { CreateOrderPayload } from '@/types/order'
+import type { DeliverySchedule, DeliveryDetails } from '@/types/delivery'
 
 interface CategoryOption {
   id: number | 'all'
@@ -283,6 +290,38 @@ const isSuccessModalOpen = ref(false)
 const isSubmittingCheckout = ref(false)
 const isUserLoggedIn = ref(false)
 
+// Delivery State
+const deliveryMethod = ref<'pickup' | 'delivery'>('pickup')
+const getTodayFormatted = () => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+const deliveryDate = ref(getTodayFormatted())
+const selectedScheduleId = ref<number | null>(null)
+const selectedSchedule = ref<DeliverySchedule | null>(null)
+const deliveryLatitude = ref<number | null>(null)
+const deliveryLongitude = ref<number | null>(null)
+const deliveryNotes = ref('')
+const shippingDistance = ref(0)
+const shippingFee = ref(0)
+
+// Active Delivery for Reschedule Modal
+const isRescheduleModalOpen = ref(false)
+const activeDeliveryForModal = ref<DeliveryDetails | null>(null)
+
+const grandTotalWithDelivery = computed<number>(() => {
+  const base = grandTotal.value
+  return deliveryMethod.value === 'delivery' ? base + shippingFee.value : base
+})
+
+const onUpdateDistanceAndFee = (info: { distanceKm: number; shippingFee: number }) => {
+  shippingDistance.value = info.distanceKm
+  shippingFee.value = info.shippingFee
+}
+
 const customerForm = ref({
   name: '',
   email: '',
@@ -305,28 +344,121 @@ const handleImageError = (productId: number | string) => {
  * PROFILE MODAL STATE & LOGIC
  * ======================================================= */
 const isProfileModalOpen = ref(false)
+const isLoadingProfile = ref(false)
+const isSavingProfile = ref(false)
+const isLocatingProfile = ref(false)
+const profileGeoError = ref<string | null>(null)
+
+const CUSTOMER_TYPE_OPTIONS = [
+  { label: 'Perorangan (Individual)', value: 'INDIVIDUAL' },
+  { label: 'Bengkel (Workshop)', value: 'WORKSHOP' },
+  { label: 'Perusahaan (Company)', value: 'COMPANY' },
+]
+
 const profileForm = ref({
   name: '',
   email: '',
   phone: '',
   address: '',
+  notes: '',
+  latitude: null as number | null,
+  longitude: null as number | null,
+  type_customer: 'INDIVIDUAL',
 })
 
-const openProfileModal = (): void => {
+const manualProfileLat = ref<string>('')
+const manualProfileLng = ref<string>('')
+
+const openProfileModal = async (): Promise<void> => {
   const session = getSession()
+  profilePopover.value?.hide()
+  isProfileModalOpen.value = true
+  profileGeoError.value = null
+
   if (session) {
     profileForm.value = {
       name: session.name || '',
       email: session.email || '',
       phone: session.phone || '',
       address: session.address || '',
+      notes: '',
+      latitude: null,
+      longitude: null,
+      type_customer: 'INDIVIDUAL',
+    }
+    manualProfileLat.value = ''
+    manualProfileLng.value = ''
+
+    // Fetch customer data from API GET /api/v1/customers/user/:userId
+    if (session.id) {
+      isLoadingProfile.value = true
+      try {
+        const customerData = await fetchCustomerByUserId(session.id)
+        if (customerData) {
+          if (customerData.name) profileForm.value.name = customerData.name
+          if (customerData.phone) profileForm.value.phone = customerData.phone
+          if (customerData.email) profileForm.value.email = customerData.email
+          if (customerData.address) profileForm.value.address = customerData.address
+          if (customerData.notes) profileForm.value.notes = customerData.notes
+          if (customerData.type_customer) profileForm.value.type_customer = customerData.type_customer
+          if (customerData.latitude !== undefined && customerData.latitude !== null && customerData.latitude !== 0) {
+            profileForm.value.latitude = customerData.latitude
+            manualProfileLat.value = String(customerData.latitude)
+          }
+          if (customerData.longitude !== undefined && customerData.longitude !== null && customerData.longitude !== 0) {
+            profileForm.value.longitude = customerData.longitude
+            manualProfileLng.value = String(customerData.longitude)
+          }
+        }
+      } catch (err) {
+        console.error('[LandingView] Error loading profile from API:', err)
+      } finally {
+        isLoadingProfile.value = false
+      }
     }
   }
-  userPopover.value?.hide()
-  isProfileModalOpen.value = true
 }
 
-const handleSaveProfile = (): void => {
+const handleGetProfileDeviceLocation = () => {
+  if (!navigator.geolocation) {
+    profileGeoError.value = 'Browser Anda tidak mendukung deteksi lokasi otomatis.'
+    return
+  }
+
+  isLocatingProfile.value = true
+  profileGeoError.value = null
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const lat = Math.round(position.coords.latitude * 1000000) / 1000000
+      const lng = Math.round(position.coords.longitude * 1000000) / 1000000
+      profileForm.value.latitude = lat
+      profileForm.value.longitude = lng
+      manualProfileLat.value = String(lat)
+      manualProfileLng.value = String(lng)
+      isLocatingProfile.value = false
+    },
+    (err) => {
+      console.warn('[ProfileModal] Geolocation error:', err)
+      profileGeoError.value = 'Izin lokasi tidak diberikan atau GPS tidak aktif.'
+      isLocatingProfile.value = false
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  )
+}
+
+const handleManualProfileCoordChange = () => {
+  const latNum = parseFloat(manualProfileLat.value)
+  const lngNum = parseFloat(manualProfileLng.value)
+
+  if (!isNaN(latNum) && !isNaN(lngNum)) {
+    profileForm.value.latitude = latNum
+    profileForm.value.longitude = lngNum
+    profileGeoError.value = null
+  }
+}
+
+const handleSaveProfile = async (): Promise<void> => {
   if (!profileForm.value.name.trim()) {
     toast.add({
       severity: 'error',
@@ -337,23 +469,60 @@ const handleSaveProfile = (): void => {
     return
   }
 
-  updateUserProfile({
-    name: profileForm.value.name.trim(),
-    email: profileForm.value.email.trim(),
-    phone: profileForm.value.phone.trim(),
-    address: profileForm.value.address.trim(),
-  })
+  if (!profileForm.value.phone.trim()) {
+    toast.add({
+      severity: 'error',
+      summary: 'Data Tidak Lengkap',
+      detail: 'Nomor telepon tidak boleh kosong.',
+      life: 3000,
+    })
+    return
+  }
 
-  // Update current session ref
-  currentSession.value = getSession()
+  isSavingProfile.value = true
 
-  toast.add({
-    severity: 'success',
-    summary: 'Profil Diperbarui',
-    detail: 'Data profil Anda berhasil disimpan.',
-    life: 3000,
-  })
-  isProfileModalOpen.value = false
+  try {
+    const session = getSession()
+
+    // Sync session data
+    updateUserProfile({
+      name: profileForm.value.name.trim(),
+      email: profileForm.value.email.trim(),
+      phone: profileForm.value.phone.trim(),
+      address: profileForm.value.address.trim(),
+    })
+    currentSession.value = getSession()
+
+    // Call API PUT /api/v1/customers/user/:userId
+    if (session?.id) {
+      await updateCustomerByUserId(session.id, {
+        name: profileForm.value.name.trim(),
+        phone: profileForm.value.phone.trim(),
+        address: profileForm.value.address.trim(),
+        notes: profileForm.value.notes.trim() || undefined,
+        type_customer: profileForm.value.type_customer || 'INDIVIDUAL',
+        latitude: profileForm.value.latitude !== null ? profileForm.value.latitude : undefined,
+        longitude: profileForm.value.longitude !== null ? profileForm.value.longitude : undefined,
+      })
+    }
+
+    toast.add({
+      severity: 'success',
+      summary: 'Profil Diperbarui',
+      detail: 'Data profil & alamat pengiriman Anda berhasil disimpan ke sistem.',
+      life: 3000,
+    })
+    isProfileModalOpen.value = false
+  } catch (err: any) {
+    toast.add({
+      severity: 'error',
+      summary: 'Gagal Menyimpan Profil',
+      detail: err?.message || 'Terjadi kesalahan saat menyimpan data profil.',
+      life: 4000,
+    })
+  } finally {
+    isSavingProfile.value = false
+  }
 }
 
 /* =========================================================
@@ -484,14 +653,32 @@ const viewOrderDetails = (orderNumber: string) => {
   router.push({ name: 'payment-finish', query: { order_id: orderNumber } })
 }
 
-const openCheckoutModal = (): void => {
+const openCheckoutModal = async (): Promise<void> => {
   const session = getSession()
   if (session && !session.isGuest) {
     isUserLoggedIn.value = true
+    // Isi awal dari session
     customerForm.value.name = session.name || ''
     customerForm.value.email = session.email || ''
     customerForm.value.phone = session.phone || ''
     customerForm.value.address = session.address || ''
+
+    // Fetch data customer terlengkap dari backend (GET /api/v1/customers/user/:user_id)
+    if (session.id) {
+      const customerData = await fetchCustomerByUserId(session.id)
+      if (customerData) {
+        if (customerData.name) customerForm.value.name = customerData.name
+        if (customerData.phone) customerForm.value.phone = customerData.phone
+        if (customerData.address) customerForm.value.address = customerData.address
+        if (customerData.notes) deliveryNotes.value = customerData.notes
+        if (customerData.latitude !== undefined && customerData.latitude !== null && customerData.latitude !== 0) {
+          deliveryLatitude.value = customerData.latitude
+        }
+        if (customerData.longitude !== undefined && customerData.longitude !== null && customerData.longitude !== 0) {
+          deliveryLongitude.value = customerData.longitude
+        }
+      }
+    }
   } else {
     isUserLoggedIn.value = false
   }
@@ -513,10 +700,39 @@ const handleProcessCheckout = async (): Promise<void> => {
     toast.add({
       severity: 'error',
       summary: 'Data Tidak Lengkap',
-      detail: 'Nomor telepon wajib diisi untuk konfirmasi pengambilan.',
+      detail: 'Nomor telepon wajib diisi untuk konfirmasi.',
       life: 3000,
     })
     return
+  }
+
+  if (deliveryMethod.value === 'delivery') {
+    if (!customerForm.value.address.trim()) {
+      toast.add({
+        severity: 'error',
+        summary: 'Alamat Wajib Diisi',
+        detail: 'Silakan lengkapi alamat pengantaran barang Anda.',
+        life: 3500,
+      })
+      return
+    }
+    if (!selectedScheduleId.value) {
+      toast.add({
+        severity: 'error',
+        summary: 'Slot Belum Dipilih',
+        detail: 'Silakan pilih slot waktu pengantaran yang tersedia.',
+        life: 3500,
+      })
+      return
+    }
+    if (deliveryLatitude.value === null || deliveryLongitude.value === null) {
+      toast.add({
+        severity: 'warn',
+        summary: 'Titik Lokasi GPS Disarankan',
+        detail: 'Mohon tentukan titik lokasi GPS Anda agar kurir dapat mengantar tepat waktu.',
+        life: 4000,
+      })
+    }
   }
 
   isSubmittingCheckout.value = true
@@ -524,7 +740,14 @@ const handleProcessCheckout = async (): Promise<void> => {
   try {
     const session = getSession()
     const isLoggedInUser = Boolean(session && !session.isGuest && session.id)
-    console.log(isLoggedInUser);
+    
+    const deliveryNoteText = deliveryMethod.value === 'delivery'
+      ? `[DELIVERY] Tgl: ${deliveryDate.value}, Slot #${selectedScheduleId.value}, Alamat: ${customerForm.value.address}. Catatan: ${deliveryNotes.value || '-'}`
+      : `[PICKUP TOKO] Catatan: ${customerForm.value.address || '-'}`
+
+    const currentShippingCost = deliveryMethod.value === 'delivery' ? shippingFee.value : 0
+    const currentTaxAmount = tax.value
+
     const payload: CreateOrderPayload = {
       ...(isLoggedInUser ? { user_id: session!.id } : {}),
       customer_name: customerForm.value.name,
@@ -536,9 +759,10 @@ const handleProcessCheckout = async (): Promise<void> => {
       source: 'web',
       payment_method: paymentMethod.value,
       status: 'reserved',
-      notes: customerForm.value.address
-        ? `Alamat/Catatan: ${customerForm.value.address}`
-        : 'Pesanan Web App',
+      notes: deliveryNoteText,
+      order_type: deliveryMethod.value,
+      tax_amount: currentTaxAmount,
+      shipping_cost: currentShippingCost,
       items: cart.value.map((item) => ({
         product_id: item.productId,
         quantity: item.quantity,
@@ -548,8 +772,25 @@ const handleProcessCheckout = async (): Promise<void> => {
 
     const order = await createOrder(payload)
     createdOrderNumber.value = order.order_number
-    createdOrderStatus.value = paymentMethod.value === 'midtrans' ? 'Menunggu Pembayaran Midtrans' : 'Menunggu Konfirmasi Admin / Ambil di Toko'
+    createdOrderStatus.value = paymentMethod.value === 'midtrans' ? 'Menunggu Pembayaran Midtrans' : 'Menunggu Konfirmasi Admin'
     lastCreatedOrderId.value = order.id
+
+    // Jika opsi delivery dipilih, kirim permintaan pengantaran ke endpoint /api/v1/deliveries/request
+    if (deliveryMethod.value === 'delivery' && selectedScheduleId.value) {
+      try {
+        await deliveryService.requestDelivery({
+          order_id: order.id,
+          schedule_id: selectedScheduleId.value,
+          delivery_date: deliveryDate.value,
+          address: customerForm.value.address,
+          latitude: deliveryLatitude.value ?? 0,
+          longitude: deliveryLongitude.value ?? 0,
+          notes: deliveryNotes.value || undefined,
+        })
+      } catch (delivErr: any) {
+        console.error('[LandingView] Delivery request notice:', delivErr)
+      }
+    }
 
     if (paymentMethod.value === 'midtrans') {
       try {
@@ -620,7 +861,7 @@ const handleProcessCheckout = async (): Promise<void> => {
       toast.add({
         severity: 'success',
         summary: 'Order Berhasil',
-        detail: `Order ${order.order_number} berhasil dibuat. Silakan bayar & ambil barang di toko!`,
+        detail: `Order ${order.order_number} berhasil dibuat. Silakan bayar & konfirmasi pesanan!`,
         life: 5000,
       })
     }
@@ -1193,9 +1434,9 @@ onMounted(async () => {
     <Dialog
       v-model:visible="isCheckoutModalOpen"
       modal
-      header="Konfirmasi Checkout & Pembayaran"
-      style="width: 32rem"
-      :breakpoints="{ '960px': '75vw', '641px': '95vw' }"
+      header="Konfirmasi Checkout & Pengantaran"
+      style="width: 36rem"
+      :breakpoints="{ '960px': '85vw', '641px': '95vw' }"
     >
       <div class="flex flex-column gap-4 pt-2">
         <!-- 1. Status Login Info -->
@@ -1236,13 +1477,73 @@ onMounted(async () => {
               <InputText id="cust-email" v-model="customerForm.email" placeholder="nama@email.com" class="w-full text-sm" />
             </div>
           </div>
-          <div class="flex flex-column gap-1">
-            <label for="cust-address" class="text-xs font-semibold text-700">Alamat Pengiriman / Catatan</label>
-            <Textarea id="cust-address" v-model="customerForm.address" rows="2" placeholder="Catatan khusus atau alamat pengambilan..." class="w-full text-sm" />
+        </div>
+
+        <!-- 3. Metode Pengiriman (Ambil di Toko vs Diantar Kurir) -->
+        <div class="flex flex-column gap-3">
+          <div class="font-semibold text-sm text-900 border-bottom-1 surface-border pb-1">
+            Metode Pengiriman
+          </div>
+          <div class="grid grid-nogutter gap-2">
+            <div class="col">
+              <div
+                class="p-3 border-1 border-round-xl cursor-pointer flex align-items-center gap-3 transition-all h-full"
+                :class="deliveryMethod === 'pickup' ? 'border-blue-600 bg-blue-50 shadow-1' : 'surface-border hover:surface-100'"
+                @click="deliveryMethod = 'pickup'"
+              >
+                <RadioButton v-model="deliveryMethod" value="pickup" />
+                <div>
+                  <div class="font-bold text-sm text-900 flex align-items-center gap-1">
+                    <i class="pi pi-building text-primary" /> Ambil di Toko
+                  </div>
+                  <div class="text-xs text-500">Ambil sendiri langsung di gudang</div>
+                </div>
+              </div>
+            </div>
+            <div class="col">
+              <div
+                class="p-3 border-1 border-round-xl cursor-pointer flex align-items-center gap-3 transition-all h-full"
+                :class="deliveryMethod === 'delivery' ? 'border-blue-600 bg-blue-50 shadow-1' : 'surface-border hover:surface-100'"
+                @click="deliveryMethod = 'delivery'"
+              >
+                <RadioButton v-model="deliveryMethod" value="delivery" />
+                <div>
+                  <div class="font-bold text-sm text-900 flex align-items-center gap-1">
+                    <i class="pi pi-truck text-primary" /> Diantar Kurir
+                  </div>
+                  <div class="text-xs text-500">Pilih slot jadwal & titik GPS</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bagian Jika Delivery Dipilih: Slot Jadwal & Map Picker -->
+          <div v-if="deliveryMethod === 'delivery'" class="flex flex-column gap-3 mt-1 surface-50 p-3 border-round-xl border-1 surface-border">
+            <DeliveryScheduleSelector
+              v-model:selectedDate="deliveryDate"
+              v-model:selectedScheduleId="selectedScheduleId"
+              @selectSchedule="(sched) => (selectedSchedule = sched)"
+            />
+
+            <Divider class="my-1" />
+
+            <LocationMapPicker
+              v-model:latitude="deliveryLatitude"
+              v-model:longitude="deliveryLongitude"
+              v-model:address="customerForm.address"
+              v-model:notes="deliveryNotes"
+              @updateDistanceAndFee="onUpdateDistanceAndFee"
+            />
+          </div>
+
+          <!-- Bagian Jika Pickup Dipilih -->
+          <div v-else class="flex flex-column gap-1">
+            <label for="cust-address-pickup" class="text-xs font-semibold text-700">Catatan Pengambilan (Opsional)</label>
+            <Textarea id="cust-address-pickup" v-model="customerForm.address" rows="2" placeholder="Catatan jam pengambilan atau info lainnya..." class="w-full text-sm" />
           </div>
         </div>
 
-        <!-- 3. Pilih Metode Pembayaran -->
+        <!-- 4. Pilih Metode Pembayaran -->
         <div class="flex flex-column gap-3">
           <div class="font-semibold text-sm text-900 border-bottom-1 surface-border pb-1">
             Pilih Metode Pembayaran
@@ -1271,8 +1572,8 @@ onMounted(async () => {
               <div class="flex align-items-center gap-3">
                 <RadioButton v-model="paymentMethod" value="cash" />
                 <div>
-                  <div class="font-bold text-sm text-900">Bayar Cash di Toko</div>
-                  <div class="text-xs text-500">Bayar saat mengambil barang di toko secara langsung</div>
+                  <div class="font-bold text-sm text-900">{{ deliveryMethod === 'delivery' ? 'Bayar Cash ke Kurir (COD)' : 'Bayar Cash di Toko' }}</div>
+                  <div class="text-xs text-500">{{ deliveryMethod === 'delivery' ? 'Bayar tunai saat barang diantar oleh kurir' : 'Bayar saat mengambil barang di toko secara langsung' }}</div>
                 </div>
               </div>
               <i class="pi pi-money-bill text-xl text-green-600" />
@@ -1280,20 +1581,24 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- 4. Ringkasan Total & Tombol Bayar -->
+        <!-- 5. Ringkasan Total & Tombol Bayar -->
         <div class="surface-100 border-round-xl p-3 flex flex-column gap-2 mt-1">
           <div class="flex justify-content-between text-xs text-600">
-            <span>Jumlah Item:</span>
-            <span class="font-semibold">{{ cartCount }} item</span>
+            <span>Subtotal Produk ({{ cartCount }} item):</span>
+            <span class="font-semibold">{{ formatCurrencyIDR(subtotal) }}</span>
           </div>
           <div class="flex justify-content-between text-xs text-600">
             <span>Pajak (11%):</span>
             <span class="font-semibold">{{ formatCurrencyIDR(tax) }}</span>
           </div>
+          <div v-if="deliveryMethod === 'delivery'" class="flex justify-content-between text-xs text-600">
+            <span>Ongkir Pengantaran Kurir ({{ shippingDistance }} km):</span>
+            <span class="font-semibold text-blue-700">{{ formatCurrencyIDR(shippingFee) }}</span>
+          </div>
           <Divider class="my-1" />
           <div class="flex justify-content-between align-items-center">
             <span class="font-bold text-sm text-900">Total Pembayaran:</span>
-            <span class="font-extrabold text-lg text-blue-600">{{ formatCurrencyIDR(grandTotal) }}</span>
+            <span class="font-extrabold text-lg text-blue-600">{{ formatCurrencyIDR(grandTotalWithDelivery) }}</span>
           </div>
         </div>
       </div>
@@ -1410,28 +1715,51 @@ onMounted(async () => {
     <Dialog
       v-model:visible="isProfileModalOpen"
       modal
-      header="Profil Saya"
-      style="width: 32rem"
+      header="Profil & Alamat Pelanggan"
+      style="width: 90vw; max-width: 36rem"
+      class="border-round-2xl"
     >
-      <div class="flex flex-column gap-3 pt-2">
+      <div v-if="isLoadingProfile" class="flex flex-column align-items-center justify-content-center py-6 gap-3">
+        <ProgressSpinner style="width: 36px; height: 36px" strokeWidth="4" />
+        <span class="text-sm text-500">Memuat data profil...</span>
+      </div>
+
+      <div v-else class="flex flex-column gap-3 pt-2">
+        <!-- Header Info Box -->
         <div class="flex align-items-center gap-3 p-3 bg-blue-50 border-round-xl border-1 border-blue-200">
-          <div class="w-3rem h-3rem border-circle bg-blue-600 text-white flex align-items-center justify-content-center font-bold text-xl">
+          <div class="w-3rem h-3rem border-circle bg-blue-600 text-white flex align-items-center justify-content-center font-bold text-xl flex-shrink-0">
             <i class="pi pi-user text-2xl"></i>
           </div>
           <div>
             <div class="font-bold text-base text-blue-900">{{ currentUserName }}</div>
-            <div class="text-xs text-600">Kelola data profil & alamat pengiriman utama Anda</div>
+            <div class="text-xs text-600">Kelola data profil, tipe pelanggan, dan koordinat GPS pengantaran Anda.</div>
           </div>
         </div>
 
-        <div class="flex flex-column gap-1">
-          <label for="prof-name" class="text-xs font-semibold text-700">Nama Lengkap *</label>
-          <InputText id="prof-name" v-model="profileForm.name" placeholder="Masukkan nama lengkap" class="w-full text-sm" />
+        <!-- Nama & Tipe Customer -->
+        <div class="grid">
+          <div class="col-12 sm:col-7 flex flex-column gap-1">
+            <label for="prof-name" class="text-xs font-semibold text-700">Nama Lengkap *</label>
+            <InputText id="prof-name" v-model="profileForm.name" placeholder="Masukkan nama lengkap" class="w-full text-sm" />
+          </div>
+          <div class="col-12 sm:col-5 flex flex-column gap-1">
+            <label for="prof-type" class="text-xs font-semibold text-700">Tipe Pelanggan</label>
+            <Select
+              id="prof-type"
+              v-model="profileForm.type_customer"
+              :options="CUSTOMER_TYPE_OPTIONS"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="Pilih Tipe"
+              class="w-full text-sm"
+            />
+          </div>
         </div>
 
+        <!-- Nomor Telepon & Email -->
         <div class="grid">
           <div class="col-12 sm:col-6 flex flex-column gap-1">
-            <label for="prof-phone" class="text-xs font-semibold text-700">Nomor Telepon / WA</label>
+            <label for="prof-phone" class="text-xs font-semibold text-700">Nomor Telepon / WA *</label>
             <InputText id="prof-phone" v-model="profileForm.phone" placeholder="08xxxxxxxxxx" class="w-full text-sm" />
           </div>
           <div class="col-12 sm:col-6 flex flex-column gap-1">
@@ -1440,16 +1768,79 @@ onMounted(async () => {
           </div>
         </div>
 
+        <!-- Alamat Utama -->
         <div class="flex flex-column gap-1">
-          <label for="prof-address" class="text-xs font-semibold text-700">Alamat Pengiriman Utama</label>
-          <Textarea id="prof-address" v-model="profileForm.address" rows="3" placeholder="Masukkan jalan, RT/RW, Kecamatan, Kota, Kode Pos..." class="w-full text-sm" />
+          <label for="prof-address" class="text-xs font-semibold text-700">Alamat Pengiriman Utama *</label>
+          <Textarea id="prof-address" v-model="profileForm.address" rows="2" placeholder="Masukkan jalan, RT/RW, Kelurahan, Kecamatan, Kota..." class="w-full text-sm" />
+        </div>
+
+        <!-- Catatan / Patokan Khusus -->
+        <div class="flex flex-column gap-1">
+          <label for="prof-notes" class="text-xs font-semibold text-700">Patokan / Catatan Kurir</label>
+          <InputText id="prof-notes" v-model="profileForm.notes" placeholder="Cth: Pagar hitam samping warung madura" class="w-full text-sm" />
+        </div>
+
+        <!-- Titik Koordinat GPS / Pin Point -->
+        <div class="surface-50 border-round-xl p-3 border-1 surface-border flex flex-column gap-2 mt-1">
+          <div class="flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="flex align-items-center gap-1">
+              <i class="pi pi-map-marker text-red-500 font-bold" />
+              <span class="text-xs font-bold text-900">Titik Koordinat GPS Rumah / Bengkel</span>
+            </div>
+            <Button
+              label="Gunakan Lokasi Saya"
+              icon="pi pi-compass"
+              size="small"
+              outlined
+              severity="primary"
+              class="text-xs p-1 px-2"
+              :loading="isLocatingProfile"
+              @click="handleGetProfileDeviceLocation"
+            />
+          </div>
+
+          <div v-if="profileGeoError" class="text-xs text-red-600 bg-red-50 p-2 border-round border-1 border-red-200">
+            <i class="pi pi-exclamation-triangle mr-1" />
+            {{ profileGeoError }}
+          </div>
+
+          <div class="grid grid-nogutter gap-2 mt-1">
+            <div class="col flex flex-column gap-1">
+              <span class="text-xs text-500">Latitude</span>
+              <InputText
+                v-model="manualProfileLat"
+                placeholder="-7.95607"
+                class="w-full text-xs font-mono p-2"
+                @blur="handleManualProfileCoordChange"
+              />
+            </div>
+            <div class="col flex flex-column gap-1">
+              <span class="text-xs text-500">Longitude</span>
+              <InputText
+                v-model="manualProfileLng"
+                placeholder="112.620339"
+                class="w-full text-xs font-mono p-2"
+                @blur="handleManualProfileCoordChange"
+              />
+            </div>
+          </div>
+          <div class="text-xs text-500 italic">
+            * Titik koordinat ini akan tersimpan permanen sebagai alamat pengantaran default Anda saat checkout.
+          </div>
         </div>
       </div>
 
       <template #footer>
         <div class="flex justify-content-end gap-2 w-full pt-2">
-          <Button label="Batal" severity="secondary" outlined size="small" @click="isProfileModalOpen = false" />
-          <Button label="Simpan Profil" icon="pi pi-check" severity="primary" size="small" @click="handleSaveProfile" />
+          <Button label="Batal" severity="secondary" outlined size="small" :disabled="isSavingProfile" @click="isProfileModalOpen = false" />
+          <Button
+            label="Simpan Profil"
+            icon="pi pi-check"
+            severity="primary"
+            size="small"
+            :loading="isSavingProfile"
+            @click="handleSaveProfile"
+          />
         </div>
       </template>
     </Dialog>
@@ -1627,5 +2018,20 @@ onMounted(async () => {
         </div>
       </div>
     </footer>
+    <!-- ==========================================
+         7.7. MODAL NOTIFIKASI RESCHEDULE
+    =========================================== -->
+    <RescheduleNotificationModal
+      v-model:visible="isRescheduleModalOpen"
+      :delivery="activeDeliveryForModal"
+      @accepted="() => {
+        toast.add({
+          severity: 'success',
+          summary: 'Jadwal Baru Diterima',
+          detail: 'Konfirmasi jadwal baru telah diteruskan ke kurir.',
+          life: 4000
+        })
+      }"
+    />
   </div>
 </template>

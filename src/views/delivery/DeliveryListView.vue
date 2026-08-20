@@ -599,6 +599,7 @@ const openGoogleMaps = (lat?: number | null, lng?: number | null) => {
                   size="small"
                   severity="danger"
                   outlined
+                  title="Buka Lokasi di Google Maps"
                   v-tooltip.top="'Buka Lokasi di Google Maps'"
                   @click="openGoogleMaps(getCoordinates(data)?.lat, getCoordinates(data)?.lng)"
                 />
@@ -609,6 +610,7 @@ const openGoogleMaps = (lat?: number | null, lng?: number | null) => {
                   icon="pi pi-check"
                   size="small"
                   severity="success"
+                  title="Konfirmasi Pengantaran"
                   v-tooltip.top="'Konfirmasi Pengantaran'"
                   :loading="isActionLoading"
                   @click="handleConfirmDelivery(data)"
@@ -621,6 +623,7 @@ const openGoogleMaps = (lat?: number | null, lng?: number | null) => {
                   size="small"
                   severity="warn"
                   outlined
+                  title="Ajukan Reschedule"
                   v-tooltip.top="'Ajukan Reschedule'"
                   :disabled="isActionLoading"
                   @click="openRescheduleModal(data)"
@@ -633,6 +636,7 @@ const openGoogleMaps = (lat?: number | null, lng?: number | null) => {
                   severity="secondary"
                   text
                   rounded
+                  title="Lihat Detail"
                   v-tooltip.top="'Lihat Detail'"
                   @click="openDetailModal(data)"
                 />

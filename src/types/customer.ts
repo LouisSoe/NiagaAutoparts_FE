@@ -6,18 +6,22 @@ export interface Customer {
   user_name?: string | null
   user_email?: string | null
   user_phone?: string | null
-  /** Legacy / fallback fields */
   name?: string | null
+  phone?: string | null
   phone_number?: string | null
   email?: string | null
-  /** Data customer lainnya */
-  code: string
-  type: CustomerType
-  address: string | null
+  code?: string
+  type?: CustomerType
+  type_customer?: CustomerType | string
+  address?: string | null
+  latitude?: number | null
+  longitude?: number | null
   notes?: string | null
-  isActive: boolean
-  totalOrders: number
-  totalSpent: number
+  isActive?: boolean
+  total_orders?: number
+  totalOrders?: number
+  total_spent?: number
+  totalSpent?: number
   created_at?: string
   updated_at?: string
 }

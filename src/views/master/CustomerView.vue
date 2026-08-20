@@ -145,7 +145,8 @@ const loadCustomers = async (): Promise<void> => {
   isLoading.value = true
   try {
     const res = await fetchCustomers({
-      q: search.value.trim(),
+      q: search.value.trim() || undefined,
+      type_customer: selectedType.value || undefined,
       page: page.value,
       limit: limit.value,
     })
@@ -173,6 +174,11 @@ watch(search, () => {
   }, 400)
 })
 
+watch(selectedType, () => {
+  page.value = 1
+  loadCustomers()
+})
+
 const onPage = (event: any) => {
   page.value = event.page + 1
   limit.value = event.rows
@@ -188,18 +194,6 @@ onMounted(async () => {
  * COMPUTED
  * ======================================================= */
 
-const filteredCustomers = computed<Customer[]>(() => {
-  const keyword = search.value.trim().toLowerCase()
-
-  return customers.value.filter((customer) => {
-    if (!keyword) return true
-    const name = (customer.user_name ?? customer.name ?? '').toLowerCase()
-    const phone = (customer.user_phone ?? customer.phone_number ?? '').toLowerCase()
-    const email = (customer.user_email ?? customer.email ?? '').toLowerCase()
-    return name.includes(keyword) || phone.includes(keyword) || email.includes(keyword)
-  })
-})
-
 const dialogTitle = computed<string>(() => {
   return editMode.value ? 'Edit Customer' : 'Tambah Customer'
 })
@@ -208,7 +202,7 @@ const dialogTitle = computed<string>(() => {
  * HELPERS
  * ======================================================= */
 
-const getCustomerTypeLabel = (type: CustomerType): string => {
+const getCustomerTypeLabel = (type?: CustomerType | string | null): string => {
   switch (type) {
     case 'WORKSHOP':
       return 'Bengkel'
@@ -222,7 +216,7 @@ const getCustomerTypeLabel = (type: CustomerType): string => {
   }
 }
 
-const getCustomerTypeSeverity = (type: CustomerType): 'info' | 'success' | 'secondary' => {
+const getCustomerTypeSeverity = (type?: CustomerType | string | null): 'info' | 'success' | 'secondary' => {
   switch (type) {
     case 'WORKSHOP':
       return 'info'
@@ -330,6 +324,7 @@ const createCustomer = async (): Promise<void> => {
       address: form.address.trim() || undefined,
       notes: form.notes.trim() || undefined,
       type: form.type ?? undefined,
+      type_customer: form.type ?? undefined,
     }
     await apiCreateCustomer(payload)
     await loadCustomers()
@@ -362,6 +357,7 @@ const updateCustomer = async (): Promise<void> => {
       address: form.address.trim() || undefined,
       notes: form.notes.trim() || undefined,
       type: form.type ?? undefined,
+      type_customer: form.type ?? undefined,
     })
     await loadCustomers()
     dialogVisible.value = false

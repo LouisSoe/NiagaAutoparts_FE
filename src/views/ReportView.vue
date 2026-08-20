@@ -165,34 +165,69 @@ const loadReportData = async (): Promise<void> => {
 
         // 2. Calculate Daily Revenue Trend
         const dayMap = new Map<string, number>();
-        filteredOrders.forEach((o) => {
-            if (o.created_at && (o.status === 'paid' || o.status === 'completed' || o.status === 'settlement')) {
-                const dayLabel = o.created_at.split('T')[0].split('-')[2]; // Extract DD
-                dayMap.set(dayLabel, (dayMap.get(dayLabel) || 0) + o.total_price);
+        // Pre-fill all days in the date range so days with 0 revenue are also represented
+        const curDate = new Date(startDate.value);
+        const lastDate = new Date(endDate.value);
+        curDate.setHours(0, 0, 0, 0);
+        lastDate.setHours(0, 0, 0, 0);
+
+        // If range is reasonable (<= 90 days), fill daily dates
+        const diffTime = Math.abs(lastDate.getTime() - curDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+        if (diffDays <= 90) {
+            const tempDate = new Date(curDate);
+            while (tempDate <= lastDate) {
+                const dStr = formatDateToApi(tempDate);
+                const dayLabel = `${String(tempDate.getDate()).padStart(2, '0')}/${String(tempDate.getMonth() + 1).padStart(2, '0')}`;
+                dayMap.set(dStr, 0);
+                tempDate.setDate(tempDate.getDate() + 1);
+            }
+        }
+
+        validPaidOrders.forEach((o) => {
+            if (o.created_at) {
+                const dateKey = o.created_at.split('T')[0];
+                dayMap.set(dateKey, (dayMap.get(dateKey) || 0) + o.total_price);
             }
         });
 
         const dailyList: TrendItem[] = [];
-        Array.from(dayMap.keys()).sort().forEach((day) => {
-            dailyList.push({ label: day, value: dayMap.get(day) || 0 });
+        Array.from(dayMap.keys()).sort().forEach((key) => {
+            const parts = key.split('-');
+            const label = parts.length === 3 ? `${parts[2]}/${parts[1]}` : key;
+            dailyList.push({ label, value: dayMap.get(key) || 0 });
         });
         dailyRevenue.value = dailyList.length > 0 ? dailyList : [{ label: '01', value: 0 }];
 
-        // 3. Calculate Monthly Revenue Trend
+        // 3. Calculate Monthly Revenue Trend for the selected filter range
         const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-        const monthMap = new Map<number, number>();
-        orders.forEach((o) => {
-            if (o.created_at && (o.status === 'paid' || o.status === 'completed' || o.status === 'settlement')) {
-                const mIndex = new Date(o.created_at).getMonth();
-                monthMap.set(mIndex, (monthMap.get(mIndex) || 0) + o.total_price);
+        const monthMap = new Map<string, number>();
+
+        // Pre-populate months within the selected date range
+        const tempMonth = new Date(curDate.getFullYear(), curDate.getMonth(), 1);
+        const endMonth = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
+        while (tempMonth <= endMonth) {
+            const mKey = `${tempMonth.getFullYear()}-${String(tempMonth.getMonth() + 1).padStart(2, '0')}`;
+            monthMap.set(mKey, 0);
+            tempMonth.setMonth(tempMonth.getMonth() + 1);
+        }
+
+        validPaidOrders.forEach((o) => {
+            if (o.created_at) {
+                const d = new Date(o.created_at);
+                const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                monthMap.set(mKey, (monthMap.get(mKey) || 0) + o.total_price);
             }
         });
 
         const monthlyList: TrendItem[] = [];
-        monthNames.forEach((mName, idx) => {
-            if (monthMap.has(idx)) {
-                monthlyList.push({ label: mName, value: monthMap.get(idx) || 0 });
-            }
+        Array.from(monthMap.keys()).sort().forEach((mKey) => {
+            const [y, m] = mKey.split('-');
+            const mIdx = parseInt(m, 10) - 1;
+            const name = monthNames[mIdx] || m;
+            const label = curDate.getFullYear() === lastDate.getFullYear() ? name : `${name} '${y.slice(2)}`;
+            monthlyList.push({ label, value: monthMap.get(mKey) || 0 });
         });
         monthlyRevenue.value = monthlyList.length > 0 ? monthlyList : monthNames.slice(0, 6).map(m => ({ label: m, value: 0 }));
 
@@ -545,12 +580,14 @@ const handleExportPdf = (): void => {
                     icon="pi pi-download"
                     severity="secondary"
                     outlined
+                    title="Ekspor laporan ke file Excel (.xlsx)"
                     @click="handleExportExcel"
                 />
 
                 <Button
                     label="Ekspor PDF"
                     icon="pi pi-file-pdf"
+                    title="Ekspor laporan ke file PDF (.pdf)"
                     @click="handleExportPdf"
                 />
             </div>

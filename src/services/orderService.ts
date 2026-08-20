@@ -27,12 +27,16 @@ export interface OrderApiItem {
   id: number
   order_number: string
   user_id?: number | null
+  customer_id?: number | null
   total_price: number
   amount_paid: number
   change_amount: number
   status: string
   source: string
   payment_method: string
+  order_type?: string | null
+  tax_amount?: number | null
+  shipping_cost?: number | null
   notes?: string | null
   expires_at?: string | null
   created_at: string
@@ -72,12 +76,16 @@ function mapOrder(item: OrderApiItem): Order {
     id: item.id,
     order_number: item.order_number,
     user_id: item.user_id ?? null,
+    customer_id: item.customer_id ?? null,
     total_price: item.total_price,
     amount_paid: item.amount_paid,
     change_amount: item.change_amount,
     status: item.status,
     source: item.source,
     payment_method: item.payment_method,
+    order_type: item.order_type ?? null,
+    tax_amount: item.tax_amount ?? 0,
+    shipping_cost: item.shipping_cost ?? 0,
     notes: item.notes ?? null,
     expires_at: item.expires_at ?? null,
     created_at: item.created_at,

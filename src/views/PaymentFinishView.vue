@@ -250,10 +250,18 @@ const goToOrders = () => {
               </span>
             </div>
 
-            <div v-if="orderData?.total_price" class="flex justify-content-between align-items-center text-sm">
-              <span class="text-color-secondary">Total Pembayaran</span>
-              <span class="font-bold text-primary text-base">
-                {{ formatCurrencyIDR(orderData.total_price) }}
+            <div v-if="orderData?.payment_method" class="flex justify-content-between align-items-center text-sm">
+              <span class="text-color-secondary">Metode Pembayaran</span>
+              <span class="font-semibold text-700 capitalize flex align-items-center gap-1">
+                <i class="pi pi-credit-card text-primary text-xs"></i>
+                {{ orderData.payment_method === 'midtrans' ? 'Midtrans (QRIS / VA / E-Wallet)' : (orderData.payment_method === 'cash' ? 'Tunai / Cash' : orderData.payment_method) }}
+              </span>
+            </div>
+
+            <div v-if="orderData?.order_type" class="flex justify-content-between align-items-center text-sm">
+              <span class="text-color-secondary">Tipe Pesanan</span>
+              <span class="font-semibold text-700 capitalize">
+                {{ orderData.order_type === 'delivery' ? 'Pengantaran (Delivery)' : (orderData.order_type === 'pickup' ? 'Ambil Sendiri di Toko (Pickup)' : orderData.order_type) }}
               </span>
             </div>
 
@@ -271,11 +279,37 @@ const goToOrders = () => {
               </span>
             </div>
 
-            <div v-if="orderData?.payment_method" class="flex justify-content-between align-items-center text-sm">
-              <span class="text-color-secondary">Metode Pembayaran</span>
-              <span class="font-semibold text-700 capitalize">
-                {{ orderData.payment_method }}
-              </span>
+            <!-- Items Breakdown jika ada -->
+            <div v-if="orderData?.items && orderData.items.length" class="surface-0 border-round-lg p-2.5 border-1 surface-border flex flex-column gap-2 text-xs my-1">
+              <span class="font-semibold text-700">Rincian Item:</span>
+              <div v-for="item in orderData.items" :key="item.id" class="flex justify-content-between align-items-center text-700">
+                <span class="truncate max-w-16rem">{{ item.product_name || `Produk #${item.product_id}` }} ×{{ item.quantity }}</span>
+                <span class="font-medium text-900">{{ formatCurrencyIDR(item.subtotal) }}</span>
+              </div>
+            </div>
+
+            <!-- Catatan Pesanan jika ada -->
+            <div v-if="orderData?.notes" class="text-xs text-600 bg-yellow-50 border-1 border-yellow-200 border-round p-2">
+              <span class="font-bold text-yellow-900 block mb-0.5">Catatan:</span>
+              <span class="text-yellow-900">{{ orderData.notes }}</span>
+            </div>
+
+            <!-- Breakdown Biaya -->
+            <div class="border-top-1 surface-border pt-2 flex flex-column gap-1.5 text-xs">
+              <div v-if="orderData?.tax_amount && orderData.tax_amount > 0" class="flex justify-content-between text-600">
+                <span>Pajak (PPN):</span>
+                <span>{{ formatCurrencyIDR(orderData.tax_amount) }}</span>
+              </div>
+              <div v-if="orderData?.shipping_cost && orderData.shipping_cost > 0" class="flex justify-content-between text-600">
+                <span>Ongkos Kirim:</span>
+                <span>{{ formatCurrencyIDR(orderData.shipping_cost) }}</span>
+              </div>
+              <div v-if="orderData?.total_price" class="flex justify-content-between align-items-center text-sm pt-1">
+                <span class="font-bold text-800">Total Pembayaran</span>
+                <span class="font-bold text-primary text-base">
+                  {{ formatCurrencyIDR(orderData.total_price) }}
+                </span>
+              </div>
             </div>
           </div>
 

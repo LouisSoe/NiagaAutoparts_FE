@@ -1024,6 +1024,7 @@ onMounted(async () => {
             text
             severity="secondary"
             class="hidden sm:inline-flex text-xs font-semibold"
+            title="Lihat riwayat pesanan saya"
             @click="openCustomerOrdersModal"
           />
 
@@ -1035,6 +1036,7 @@ onMounted(async () => {
               text
               severity="secondary"
               aria-label="Shopping Cart"
+              title="Buka Keranjang Belanja"
               @click="isCartOpen = true"
             />
             <Badge
@@ -1054,6 +1056,7 @@ onMounted(async () => {
               text
               severity="secondary"
               aria-label="User Profile"
+              title="Menu Akun & Profil"
               @click="toggleProfilePopover"
             />
             <Popover ref="profilePopover">
@@ -1304,6 +1307,7 @@ onMounted(async () => {
                       class="surface-100 hover:surface-200 border-none text-700 p-0"
                       style="width: 2rem; height: 2rem"
                       :disabled="isOutOfStock(product) || isCartMaxed(product)"
+                      :title="isOutOfStock(product) ? 'Stok habis' : isCartMaxed(product) ? 'Jumlah maksimal stok tercapai' : 'Tambah ke Keranjang'"
                       @click="handleAddToCart(product)"
                     />
                   </div>
@@ -1368,6 +1372,7 @@ onMounted(async () => {
                 rounded
                 size="small"
                 aria-label="Hapus Item"
+                title="Hapus item dari keranjang"
                 @click="removeCartItem(item.productId)"
               />
             </div>
@@ -1382,6 +1387,7 @@ onMounted(async () => {
                   outlined
                   size="small"
                   class="w-2rem h-2rem p-0"
+                  title="Kurangi jumlah"
                   @click="decreaseQuantity(item.productId)"
                 />
                 <span class="font-semibold text-sm text-center" style="min-width: 1.5rem">
@@ -1394,6 +1400,7 @@ onMounted(async () => {
                   size="small"
                   class="w-2rem h-2rem p-0"
                   :disabled="item.quantity >= item.stock"
+                  title="Tambah jumlah"
                   @click="increaseQuantity(item.productId)"
                 />
               </div>
@@ -1956,8 +1963,15 @@ onMounted(async () => {
             </div>
 
             <div class="flex justify-content-between align-items-center text-xs text-color-secondary">
-              <span>Tanggal: {{ new Date(ord.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</span>
-              <span class="capitalize">Metode: {{ ord.payment_method || '-' }}</span>
+              <span><i class="pi pi-calendar mr-1"></i>{{ new Date(ord.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</span>
+              <span class="flex align-items-center gap-1">
+                <span class="capitalize bg-blue-50 text-blue-700 px-2 py-0.5 border-round font-medium">
+                  <i class="pi pi-credit-card mr-1"></i>{{ ord.payment_method === 'midtrans' ? 'Midtrans' : (ord.payment_method === 'cash' ? 'Tunai' : (ord.payment_method || '-')) }}
+                </span>
+                <span v-if="ord.order_type" class="capitalize bg-gray-100 text-700 px-2 py-0.5 border-round font-medium">
+                  {{ ord.order_type === 'delivery' ? '🚚 Delivery' : '🏪 Pickup' }}
+                </span>
+              </span>
             </div>
 
             <!-- Items Breakdown -->

@@ -513,6 +513,7 @@ const confirmDeleteCustomer = (customer: Customer): void => {
               icon="pi pi-filter-slash"
               severity="secondary"
               text
+              title="Reset semua filter"
               @click="resetFilters"
             />
           </div>
@@ -618,6 +619,7 @@ const confirmDeleteCustomer = (customer: Customer): void => {
                   text
                   rounded
                   aria-label="Edit customer"
+                  title="Edit Customer"
                   @click="openEditDialog(data)"
                 />
 
@@ -627,6 +629,7 @@ const confirmDeleteCustomer = (customer: Customer): void => {
                   text
                   rounded
                   aria-label="Hapus customer"
+                  title="Hapus Customer"
                   @click="confirmDeleteCustomer(data)"
                 />
               </div>

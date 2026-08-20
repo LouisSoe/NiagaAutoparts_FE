@@ -452,6 +452,7 @@ const handleSkipReceipt = (): void => {
                                     text
                                     size="small"
                                     class="p-0 w-2rem h-2rem text-blue-600 hover:bg-blue-50"
+                                    title="Tambah ke Keranjang"
                                     @click.stop="addToCart(product)"
                                 />
                             </div>
@@ -524,6 +525,7 @@ const handleSkipReceipt = (): void => {
                                     text
                                     rounded
                                     size="small"
+                                    title="Hapus dari Keranjang"
                                     @click="removeCartItem(item.productId)"
                                 />
                             </div>
@@ -535,6 +537,7 @@ const handleSkipReceipt = (): void => {
                                         rounded
                                         outlined
                                         size="small"
+                                        title="Kurangi Jumlah"
                                         @click="decreaseQuantity(item.productId)"
                                     />
 
@@ -547,6 +550,7 @@ const handleSkipReceipt = (): void => {
                                         rounded
                                         outlined
                                         size="small"
+                                        title="Tambah Jumlah"
                                         :disabled="item.quantity >= item.stock"
                                         @click="increaseQuantity(item.productId)"
                                     />

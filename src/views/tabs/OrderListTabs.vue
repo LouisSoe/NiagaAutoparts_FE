@@ -231,6 +231,7 @@ const confirmDeleteOrder = (order: Order): void => {
           icon="pi pi-filter-slash"
           severity="secondary"
           text
+          title="Reset semua filter pencarian"
           @click="resetFilters"
         />
       </div>
@@ -326,6 +327,7 @@ const confirmDeleteOrder = (order: Order): void => {
               text
               rounded
               aria-label="Detail order"
+              title="Lihat Detail Pesanan"
               @click="showOrderDetails(data)"
             />
             <Button
@@ -335,6 +337,7 @@ const confirmDeleteOrder = (order: Order): void => {
               text
               rounded
               aria-label="Hapus order"
+              title="Hapus Pesanan Dibatalkan"
               @click="confirmDeleteOrder(data)"
             />
           </div>
@@ -368,24 +371,72 @@ const confirmDeleteOrder = (order: Order): void => {
       :draggable="false"
     >
       <div v-if="selectedOrder" class="flex flex-column gap-3">
-        <div class="flex flex-column md:flex-row justify-content-between gap-2 border-bottom-1 surface-border pb-3">
+        <!-- Header Info -->
+        <div class="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center gap-2 border-bottom-1 surface-border pb-3">
           <div>
-            <div class="text-xs text-500">Order Number</div>
-            <div class="font-bold text-lg text-900">{{ selectedOrder.order_number }}</div>
+            <div class="text-xs text-500">Nomor Pesanan</div>
+            <div class="font-bold text-lg text-900 font-mono">{{ selectedOrder.order_number }}</div>
+            <div class="text-xs text-500 mt-1">
+              <i class="pi pi-calendar mr-1"></i>{{ formatDateTimeID(selectedOrder.created_at) }}
+            </div>
           </div>
-          <div>
-            <div class="text-xs text-500">Status</div>
+          <div class="flex flex-column align-items-start md:align-items-end gap-1">
+            <div class="text-xs text-500">Status Pesanan</div>
             <Tag
               :value="selectedOrder.status"
               :severity="getStatusSeverity(selectedOrder.status)"
               rounded
-              class="uppercase text-xs mt-1"
+              class="uppercase text-xs"
             />
           </div>
         </div>
 
+        <!-- Info Grid (Metode Pembayaran, Jenis Pesanan, Sumber) -->
+        <div class="grid p-fluid">
+          <div class="col-12 sm:col-4">
+            <div class="surface-100 border-round-lg p-3 border-1 surface-border h-full">
+              <div class="text-xs text-500 mb-1 flex align-items-center gap-1">
+                <i class="pi pi-credit-card text-blue-600"></i> Metode Bayar
+              </div>
+              <div class="font-bold text-900 capitalize text-sm">
+                {{ selectedOrder.payment_method || '-' }}
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12 sm:col-4">
+            <div class="surface-100 border-round-lg p-3 border-1 surface-border h-full">
+              <div class="text-xs text-500 mb-1 flex align-items-center gap-1">
+                <i class="pi pi-box text-green-600"></i> Tipe Pesanan
+              </div>
+              <div class="font-bold text-900 capitalize text-sm">
+                {{ selectedOrder.order_type === 'delivery' ? 'Pengantaran (Delivery)' : (selectedOrder.order_type === 'pickup' ? 'Ambil di Toko (Pickup)' : (selectedOrder.order_type || 'Langsung (POS)')) }}
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12 sm:col-4">
+            <div class="surface-100 border-round-lg p-3 border-1 surface-border h-full">
+              <div class="text-xs text-500 mb-1 flex align-items-center gap-1">
+                <i class="pi pi-globe text-orange-600"></i> Sumber
+              </div>
+              <div class="font-bold text-900 uppercase text-sm">
+                {{ selectedOrder.source || 'POS' }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes / Delivery Notes jika ada -->
+        <div v-if="selectedOrder.notes" class="surface-50 border-1 surface-border border-round-lg p-3 text-xs">
+          <span class="font-semibold text-700 block mb-1">
+            <i class="pi pi-info-circle mr-1 text-primary"></i>Catatan Pesanan / Pengiriman:
+          </span>
+          <span class="text-800 line-height-3">{{ selectedOrder.notes }}</span>
+        </div>
+
         <!-- ITEMS TABLE -->
-        <div class="text-sm font-semibold text-900 mt-2">Daftar Produk / Item:</div>
+        <div class="text-sm font-semibold text-900 mt-1">Daftar Produk / Item:</div>
         <DataTable :value="selectedOrder.items || []" striped-rows class="p-datatable-sm">
           <Column field="product_name" header="NAMA PRODUK" style="min-width: 12rem">
             <template #body="{ data }">
@@ -413,9 +464,17 @@ const confirmDeleteOrder = (order: Order): void => {
 
         <!-- RINGKASAN PEMBAYARAN -->
         <div class="flex flex-column gap-2 text-sm">
+          <div v-if="selectedOrder.tax_amount && selectedOrder.tax_amount > 0" class="flex justify-content-between">
+            <span class="text-500">Pajak (PPN):</span>
+            <span class="font-medium text-900">{{ formatCurrencyIDR(selectedOrder.tax_amount) }}</span>
+          </div>
+          <div v-if="selectedOrder.shipping_cost && selectedOrder.shipping_cost > 0" class="flex justify-content-between">
+            <span class="text-500">Ongkos Kirim:</span>
+            <span class="font-medium text-900">{{ formatCurrencyIDR(selectedOrder.shipping_cost) }}</span>
+          </div>
           <div class="flex justify-content-between">
-            <span class="text-500">Total Harga:</span>
-            <span class="font-bold text-900">{{ formatCurrencyIDR(selectedOrder.total_price) }}</span>
+            <span class="text-600 font-semibold">Total Harga:</span>
+            <span class="font-bold text-primary text-base">{{ formatCurrencyIDR(selectedOrder.total_price) }}</span>
           </div>
           <div class="flex justify-content-between">
             <span class="text-500">Nominal Dibayar:</span>

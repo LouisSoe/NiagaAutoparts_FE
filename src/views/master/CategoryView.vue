@@ -446,6 +446,7 @@ const confirmDeleteCategory = (category: Category): void => {
                   text
                   rounded
                   aria-label="Edit category"
+                  title="Edit Kategori"
                   @click="openEditDialog(data)"
                 />
 
@@ -455,6 +456,7 @@ const confirmDeleteCategory = (category: Category): void => {
                   text
                   rounded
                   aria-label="Hapus category"
+                  title="Hapus Kategori"
                   @click="confirmDeleteCategory(data)"
                 />
               </div>

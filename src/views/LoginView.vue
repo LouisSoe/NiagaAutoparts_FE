@@ -148,6 +148,7 @@ const handleGuestAccess = (): void => {
               :loading="isSubmitting"
               class="w-full font-bold mt-1"
               severity="primary"
+              title="Masuk ke Akun Anda"
             />
           </form>
 
@@ -162,6 +163,7 @@ const handleGuestAccess = (): void => {
             severity="secondary"
             outlined
             class="w-full font-semibold"
+            title="Masuk langsung tanpa registrasi akun"
             @click="handleGuestAccess"
           />
         </div>

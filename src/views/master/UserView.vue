@@ -565,6 +565,7 @@ const confirmDeleteUser = (user: User): void => {
               icon="pi pi-filter-slash"
               severity="secondary"
               text
+              title="Reset semua filter"
               @click="resetFilters"
             />
           </div>
@@ -651,6 +652,7 @@ const confirmDeleteUser = (user: User): void => {
                   text
                   rounded
                   aria-label="Edit user"
+                  title="Edit User"
                   @click="openEditDialog(data)"
                 />
 
@@ -660,6 +662,7 @@ const confirmDeleteUser = (user: User): void => {
                   text
                   rounded
                   aria-label="Hapus user"
+                  title="Hapus User"
                   @click="confirmDeleteUser(data)"
                 />
               </div>

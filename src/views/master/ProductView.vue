@@ -733,6 +733,7 @@ const confirmDeleteProduct = (product: Product): void => {
               icon="pi pi-filter-slash"
               severity="secondary"
               text
+              title="Reset semua filter"
               @click="resetFilters"
             />
           </div>
@@ -864,6 +865,7 @@ const confirmDeleteProduct = (product: Product): void => {
                   text
                   rounded
                   aria-label="Edit produk"
+                  title="Edit Produk"
                   @click="openEditDialog(data)"
                 />
 
@@ -873,6 +875,7 @@ const confirmDeleteProduct = (product: Product): void => {
                   text
                   rounded
                   aria-label="Hapus produk"
+                  title="Hapus Produk"
                   @click="confirmDeleteProduct(data)"
                 />
               </div>
@@ -1135,6 +1138,7 @@ const confirmDeleteProduct = (product: Product): void => {
                 text
                 class="absolute top-0 right-0"
                 style="background: rgba(0, 0, 0, 0.5); color: #fff; width: 1.5rem; height: 1.5rem"
+                title="Hapus foto produk"
                 @click="removeImage"
               />
             </div>

@@ -93,6 +93,10 @@ const roleOptions: UserRoleOption[] = [
     value: 'CASHIER',
   },
   {
+    label: 'Kurir',
+    value: 'COURIER',
+  },
+  {
     label: 'Customer',
     value: 'CUSTOMER',
   },
@@ -236,6 +240,8 @@ const getRoleLabel = (role: UserRole): string => {
       return 'Administrator'
     case 'CASHIER':
       return 'Kasir'
+    case 'COURIER':
+      return 'Kurir'
     case 'CUSTOMER':
       return 'Customer'
     default:
@@ -243,13 +249,15 @@ const getRoleLabel = (role: UserRole): string => {
   }
 }
 
-const getRoleSeverity = (role: UserRole): 'danger' | 'info' | 'success' | 'secondary' => {
+const getRoleSeverity = (role: UserRole): 'danger' | 'info' | 'success' | 'warn' | 'secondary' => {
   const r = (role ?? '').toUpperCase()
   switch (r) {
     case 'ADMIN':
       return 'danger'
     case 'CASHIER':
       return 'info'
+    case 'COURIER':
+      return 'warn'
     case 'CUSTOMER':
       return 'success'
     default:

@@ -2,9 +2,11 @@ export type UserRole =
   | 'admin'
   | 'cashier'
   | 'customer'
+  | 'courier'
   | 'ADMIN'
   | 'CASHIER'
   | 'CUSTOMER'
+  | 'COURIER'
 
 export interface User {
   id: number

@@ -324,8 +324,18 @@ const openDetailModal = (item: DeliveryItem) => {
   detailDialogVisible.value = true
 }
 
-const openGoogleMaps = (lat: number, lng: number) => {
-  if (!lat || !lng) return
+const getCoordinates = (item: DeliveryItem | null): { lat: number; lng: number } | null => {
+  if (!item) return null
+  const lat = item.latitude || item.customer_latitude
+  const lng = item.longitude || item.customer_longitude
+  if (lat !== undefined && lat !== null && lng !== undefined && lng !== null && lat !== 0 && lng !== 0) {
+    return { lat: Number(lat), lng: Number(lng) }
+  }
+  return null
+}
+
+const openGoogleMaps = (lat?: number | null, lng?: number | null) => {
+  if (lat === undefined || lat === null || lng === undefined || lng === null) return
   const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
   window.open(url, '_blank')
 }
@@ -546,15 +556,15 @@ const openGoogleMaps = (lat: number, lng: number) => {
                     {{ formatCurrencyIDR(data.shipping_cost || 0) }}
                   </span>
                   <Button
-                    v-if="data.latitude && data.longitude"
+                    v-if="getCoordinates(data)"
                     icon="pi pi-map-marker"
                     size="small"
                     text
                     rounded
                     severity="danger"
-                    v-tooltip.top="'Buka di Google Maps'"
+                    v-tooltip.top="'Lihat di Google Maps'"
                     class="p-0 w-1.5rem h-1.5rem"
-                    @click="openGoogleMaps(data.latitude, data.longitude)"
+                    @click="openGoogleMaps(getCoordinates(data)?.lat, getCoordinates(data)?.lng)"
                   />
                 </div>
               </div>
@@ -579,9 +589,20 @@ const openGoogleMaps = (lat: number, lng: number) => {
           </Column>
 
           <!-- Kolom Aksi -->
-          <Column header="Aksi" style="min-width: 170px" alignFrozen="right" frozen>
+          <Column header="Aksi" style="min-width: 180px" alignFrozen="right" frozen>
             <template #body="{ data }">
               <div class="flex align-items-center gap-1">
+                <!-- Tombol Buka Maps Langsung -->
+                <Button
+                  v-if="getCoordinates(data)"
+                  icon="pi pi-map-marker"
+                  size="small"
+                  severity="danger"
+                  outlined
+                  v-tooltip.top="'Buka Lokasi di Google Maps'"
+                  @click="openGoogleMaps(getCoordinates(data)?.lat, getCoordinates(data)?.lng)"
+                />
+
                 <!-- Tombol Konfirmasi -->
                 <Button
                   v-if="data.status === 'waiting_courier_approval'"
@@ -800,14 +821,14 @@ const openGoogleMaps = (lat: number, lng: number) => {
         </div>
 
         <!-- Tombol Maps -->
-        <div v-if="selectedDeliveryDetail.latitude && selectedDeliveryDetail.longitude" class="pt-2">
+        <div v-if="getCoordinates(selectedDeliveryDetail)" class="pt-2">
           <Button
             label="Buka Rute di Google Maps"
-            icon="pi pi-external-link"
-            severity="info"
+            icon="pi pi-map-marker"
+            severity="danger"
             outlined
             class="w-full"
-            @click="openGoogleMaps(selectedDeliveryDetail.latitude, selectedDeliveryDetail.longitude)"
+            @click="openGoogleMaps(getCoordinates(selectedDeliveryDetail)?.lat, getCoordinates(selectedDeliveryDetail)?.lng)"
           />
         </div>
       </div>
